@@ -148,6 +148,15 @@ h2:first-child{margin-top:0}
   color:var(--dust);text-decoration:none;
 }
 .form:hover,.form:focus{color:var(--brass)}
+.ex-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px}
+.ex-foot .form{margin-top:0}
+.restBtn{
+  display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
+  background:transparent;border:1px solid var(--brass-dim);color:var(--brass);
+  border-radius:8px;padding:7px 11px;font-family:var(--mono);font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;cursor:pointer;
+}
+.restBtn:active{background:var(--brass-dim);color:var(--chalk)}
 .swap{display:flex;align-items:center;gap:7px;margin-top:12px}
 .swap span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dust);margin-right:auto}
 .swap button{
@@ -235,6 +244,26 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
   opacity:0;pointer-events:none;transition:.25s;z-index:40;
 }
 .toast.show{opacity:1}
+
+/* ---- rest timer ---- */
+.restBar{
+  position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));
+  max-width:596px;margin:0 auto;
+  background:var(--raise);border:1px solid var(--brass);border-radius:14px;
+  padding:12px 14px;display:flex;align-items:center;gap:10px;overflow:hidden;
+  box-shadow:0 10px 28px rgba(0,0,0,.4);
+  transform:translateY(130%);opacity:0;transition:transform .25s ease,opacity .25s ease;
+  pointer-events:none;z-index:30;
+}
+.restBar.show{transform:translateY(0);opacity:1;pointer-events:auto}
+.restBar .rt-fill{position:absolute;left:0;top:0;height:3px;background:var(--brass);width:100%;transition:width .25s linear}
+.restBar .rt-time{font-family:var(--mono);font-weight:600;font-size:24px;color:var(--chalk);min-width:54px}
+.restBar .rt-label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dust);flex:1}
+.restBar button{
+  background:var(--slate);border:1px solid var(--steel);color:var(--chalk);border-radius:8px;
+  padding:9px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;
+}
+.restBar button:active{background:var(--brass);color:#15181C;border-color:var(--brass)}
 .note{font-size:12px;color:var(--dust);line-height:1.55;margin:14px 0 0}
 </style>
 </head>
@@ -323,6 +352,14 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
 
 <div class="toast" id="toast"></div>
 
+<div class="restBar" id="restBar">
+  <div class="rt-fill" id="rtFill"></div>
+  <span class="rt-time" id="rtTime">0:00</span>
+  <span class="rt-label" id="rtLabel">Resting…</span>
+  <button type="button" id="rtAdd">+15s</button>
+  <button type="button" id="rtSkip">Skip</button>
+</div>
+
 <script>
 /* ---------------- storage (survives no-localStorage sandboxes) ---------------- */
 const KEY='calis8w';
@@ -354,20 +391,20 @@ const LADDERS={
 /* ---------------- sessions ---------------- */
 const SESSIONS={
   A:{title:'Push emphasis',ex:[
-    {k:'pullup',t:'4 × 5-10',sets:4,top:10},
-    {k:'pushup',t:'4 × 6-12',sets:4,top:12},
-    {k:'pike',t:'4 × 6-12',sets:4,top:12},
-    {k:'lat',n:'Band lateral raise',v:'5 kg band · stand on it, arms to shoulder height',t:'4 × 15-20',sets:4,top:20},
-    {k:'squat',t:'3 × 8-15',sets:3,top:15},
-    {k:'core',t:'3 × 8-15',sets:3,top:15}
+    {k:'pullup',t:'4 × 5-10',sets:4,top:10,rest:90},
+    {k:'pushup',t:'4 × 6-12',sets:4,top:12,rest:60},
+    {k:'pike',t:'4 × 6-12',sets:4,top:12,rest:60},
+    {k:'lat',n:'Band lateral raise',v:'5 kg band · stand on it, arms to shoulder height',t:'4 × 15-20',sets:4,top:20,rest:45},
+    {k:'squat',t:'3 × 8-15',sets:3,top:15,rest:60},
+    {k:'core',t:'3 × 8-15',sets:3,top:15,rest:45}
   ]},
   B:{title:'Pull emphasis',ex:[
-    {k:'pullup',t:'5 × 5-10',sets:5,top:10},
-    {k:'row',n:'Inverted row',v:'Under a table, feet forward',t:'4 × 8-15',sets:4,top:15},
-    {k:'dip',n:'Dips',v:'Between two chairs',t:'4 × 6-12',sets:4,top:12},
-    {k:'face',n:'Band face pull',v:'10 kg band · anchor high, pull to forehead',t:'3 × 15-20',sets:3,top:20},
-    {k:'curl',n:'Band curl',v:'10 kg band · stand on it',t:'3 × 10-15',sets:3,top:15},
-    {k:'hollow',n:'Hollow body hold',v:'Seconds held',t:'3 × 20-40s',sets:3,top:40}
+    {k:'pullup',t:'5 × 5-10',sets:5,top:10,rest:90},
+    {k:'row',n:'Inverted row',v:'Under a table, feet forward',t:'4 × 8-15',sets:4,top:15,rest:60},
+    {k:'dip',n:'Dips',v:'Between two chairs',t:'4 × 6-12',sets:4,top:12,rest:75},
+    {k:'face',n:'Band face pull',v:'10 kg band · anchor high, pull to forehead',t:'3 × 15-20',sets:3,top:20,rest:45},
+    {k:'curl',n:'Band curl',v:'10 kg band · stand on it',t:'3 × 10-15',sets:3,top:15,rest:45},
+    {k:'hollow',n:'Hollow body hold',v:'Seconds held',t:'3 × 20-40s',sets:3,top:40,rest:30}
   ]}
 };
 
@@ -548,18 +585,25 @@ function renderSession(){
     const varia=e.v||(L?L.steps[D.ladders[key]]:'');
     let inputs='';
     for(let j=0;j<e.sets;j++) inputs+=`<input type="number" inputmode="numeric" data-e="${i}" data-top="${e.top}" placeholder="—" aria-label="${name} set ${j+1}">`;
+    const rest=e.rest||60;
     return `<div class="ex">
       <div class="ex-top"><span class="ex-name">${name}</span><span class="ex-target">${e.t}</span></div>
       <div class="ex-var">${varia}</div>
       <div class="sets">${inputs}</div>
-      <a class="form" target="_blank" rel="noopener"
-         href="https://www.youtube.com/results?search_query=${encodeURIComponent((e.n||varia)+' proper form tutorial')}">Form check ↗</a>
+      <div class="ex-foot">
+        <a class="form" target="_blank" rel="noopener"
+           href="https://www.youtube.com/results?search_query=${encodeURIComponent((e.n||varia)+' proper form tutorial')}">Form check ↗</a>
+        <button type="button" class="restBtn" data-rest="${rest}">⏱ Rest ${rest}s</button>
+      </div>
     </div>`;
   }).join('');
   b.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input',()=>{
       inp.classList.toggle('hit', +inp.value>=+inp.dataset.top);
     });
+  });
+  b.querySelectorAll('.restBtn').forEach(btn=>{
+    btn.onclick=()=>startRest(+btn.dataset.rest);
   });
   $('#coreSwap').hidden = (cur!=='A');
 }
@@ -677,6 +721,48 @@ $('#impFile').onchange=e=>{
   };
   r.readAsText(f);
 };
+
+/* ---------------- rest timer ---------------- */
+let restEnd=0, restTotal=0, restInt=null;
+function fmtTime(s){const m=Math.floor(s/60),r=s%60;return m+':'+String(r).padStart(2,'0');}
+function startRest(sec){
+  clearInterval(restInt);restInt=null;
+  restTotal=sec; restEnd=Date.now()+sec*1000;
+  $('#rtLabel').textContent='Resting…';
+  $('#restBar').classList.add('show');
+  tickRest();
+  restInt=setInterval(tickRest,250);
+  if(navigator.vibrate)navigator.vibrate(40);
+}
+function addRest(sec){
+  if(!$('#restBar').classList.contains('show'))return;
+  restEnd+=sec*1000;
+  const left=Math.ceil((restEnd-Date.now())/1000);
+  if(left>restTotal)restTotal=left;
+  if(left>0 && !restInt){
+    $('#rtLabel').textContent='Resting…';
+    restInt=setInterval(tickRest,250);
+  }
+  tickRest();
+}
+function stopRest(){
+  clearInterval(restInt);restInt=null;restEnd=0;restTotal=0;
+  $('#restBar').classList.remove('show');
+}
+function tickRest(){
+  const left=Math.max(0,Math.ceil((restEnd-Date.now())/1000));
+  $('#rtTime').textContent=fmtTime(left);
+  $('#rtFill').style.width=(restTotal?Math.max(0,left/restTotal*100):0)+'%';
+  if(left<=0 && restInt){
+    clearInterval(restInt);restInt=null;
+    $('#rtLabel').textContent='Go';
+    if(navigator.vibrate)navigator.vibrate([200,80,200]);
+    toast('⏱ Rest done — go');
+    setTimeout(stopRest,2000);
+  }
+}
+$('#rtAdd').onclick=()=>addRest(15);
+$('#rtSkip').onclick=()=>stopRest();
 
 /* ---------------- chrome ---------------- */
 function renderTop(){
