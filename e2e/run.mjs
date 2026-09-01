@@ -250,7 +250,77 @@ try {
   check('camera button disabled without config', await page.locator('button', { hasText: 'Photograph' }).isDisabled());
   await page.screenshot({ path: join(SHOTS, '3-food.png'), fullPage: true });
 
-  console.log('\n9. No page errors anywhere in that run');
+  console.log('\n9. Photo logging against a stubbed vision server');
+  // Configure a server and intercept the call, so the confirm-and-edit flow is
+  // exercised without a live API key.
+  await page.route('**/meal', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          { name: 'grilled chicken thigh', portionEstimate: 'one palm', grams: 150, kcal: 280, protein_g: 32, carbs_g: 0, fat_g: 17, confidence: 0.8 },
+          { name: 'white rice', portionEstimate: 'one cupped handful', grams: 200, kcal: 260, protein_g: 5.4, carbs_g: 57, fat_g: 0.6, confidence: 0.4 },
+        ],
+        total: { kcal: 540, protein_g: 37.4, carbs_g: 57, fat_g: 17.6 },
+        assumptions: ['No cooking oil visible; none assumed'],
+        usage: { input_tokens: 1512, output_tokens: 388 },
+      }),
+    });
+  });
+
+  await page.locator('nav button', { hasText: 'Setup' }).click();
+  await page.locator('input[placeholder*="workers.dev"]').fill('https://stub.example');
+  await page.locator('input[placeholder="Access token"]').fill('test-token');
+  await page.waitForTimeout(300);
+
+  await page.locator('nav button', { hasText: 'Food' }).click();
+  await page.waitForSelector('button:not([disabled]) >> text=Photograph');
+  check('camera enabled once configured', true);
+
+  // A 1x1 JPEG is enough: the stub replies regardless, and this exercises the
+  // real downscale-and-encode path in the browser.
+  const jpeg = Buffer.from(
+    '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
+    'base64',
+  );
+  await page.locator('input[accept="image/*"]').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+  await page.waitForSelector('.confirm', { timeout: 20000 });
+  check('estimate comes back for confirmation', true);
+  check('items listed', (await page.locator('.confirm .ex').count()) === 2, `${await page.locator('.confirm .ex').count()}`);
+  check('low confidence flagged', (await page.locator('.lowconf').count()) > 0);
+  check('assumptions shown', (await page.locator('.assume').innerText()).includes('oil'));
+  check('totals shown', (await page.locator('.totals b').innerText()) === '540 kcal', await page.locator('.totals b').innerText());
+
+  // Halving a portion must move the total, and it must be the edited number
+  // that gets logged, not the model's.
+  await page.locator('.confirm .ex').first().locator('button', { hasText: '½×' }).click();
+  await page.waitForTimeout(150);
+  check('halving a portion updates the total', (await page.locator('.totals b').innerText()) === '400 kcal', await page.locator('.totals b').innerText());
+  await page.screenshot({ path: join(SHOTS, '4-confirm.png'), fullPage: true });
+
+  check('nothing counted before confirming', (await page.locator('.stats').first().innerText()).includes('0'));
+  await page.locator('button', { hasText: 'Looks right' }).click();
+  const afterMeal = await waitForState(page, (d) => d.meals.some((m) => m.status === 'confirmed'), 'meal confirmed');
+  const logged = afterMeal.meals.find((m) => m.status === 'confirmed');
+  check('the edited figure is what got logged', Math.round(logged.totals.kcal) === 400, `${logged.totals.kcal}`);
+  check('protein logged too', Math.round(logged.totals.protein_g) === 21, `${logged.totals.protein_g}`);
+  check('photo discarded after confirming', await page.evaluate(async () => {
+    const req = indexedDB.open('training-log');
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result); });
+    const tx = db.transaction('photos', 'readonly');
+    const n = await new Promise((res) => { const r = tx.objectStore('photos').count(); r.onsuccess = () => res(r.result); });
+    db.close();
+    return n === 0;
+  }));
+
+  await page.waitForTimeout(300);
+  const todayKcal = await page.locator('.stats .stat b').first().innerText();
+  check('today total reflects the meal', todayKcal === '400', todayKcal);
+  check('repeat option offered', (await page.locator('h2', { hasText: 'Same as last time' }).count()) === 1);
+  await page.screenshot({ path: join(SHOTS, '5-logged.png'), fullPage: true });
+
+  console.log('\n10. No page errors anywhere in that run');
   // fonts.googleapis.com is unreachable in this sandbox, which produces both a
   // failed request and a bare console line carrying no URL. The app declares a
   // full fallback font stack, so this is an environment artifact, not a defect —
