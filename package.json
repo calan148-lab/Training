@@ -1,0 +1,12 @@
+{
+  "name": "training-log",
+  "private": true,
+  "version": "2.0.0",
+  "workspaces": ["app", "worker"],
+  "scripts": {
+    "dev": "npm run dev -w app",
+    "build": "npm run build -w app",
+    "test": "npm run test -w app",
+    "typecheck": "npm run typecheck -w app"
+  }
+}
