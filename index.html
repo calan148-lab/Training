@@ -59,6 +59,38 @@ h2{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.16e
 h2:first-child{margin-top:0}
 
 /* ---- session picker ---- */
+/* ---- week calendar strip ---- */
+.cal{background:var(--slate);border:1px solid var(--steel);border-radius:14px;padding:14px 12px 12px;margin-bottom:12px}
+.calTop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding:0 2px}
+.calTop b{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.calTop span{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dust)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.day{
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 0 7px;
+  border-radius:10px;border:1px solid transparent;background:var(--ink);
+}
+.day .dl{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--dust)}
+.day .dn{font-family:var(--mono);font-size:10px;color:var(--steel)}
+.sq{
+  width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+  font-family:var(--display);font-weight:900;font-size:14px;line-height:1;
+}
+.sq.s{background:var(--brass-dim);color:var(--brass);border:1px solid var(--brass-dim)}
+.sq.c{background:#22392F;color:var(--good);border:1px solid #2E4B3E}
+.sq.off{background:transparent;color:var(--steel);border:1px dashed var(--steel);font-size:12px}
+.day.done .sq.s{background:var(--brass);color:#15181C;border-color:var(--brass)}
+.day.done .sq.c{background:var(--good);color:#15181C;border-color:var(--good)}
+.day.done .dn{color:var(--dust)}
+.day.today{border-color:var(--chalk);background:var(--raise)}
+.day.today .dl{color:var(--chalk);font-weight:600}
+.day.today .dn{color:var(--chalk)}
+.day.future{opacity:.45}
+.todayLine{
+  font-family:var(--mono);font-size:12px;color:var(--dust);text-align:center;
+  margin-top:12px;padding-top:11px;border-top:1px solid var(--steel);letter-spacing:.03em;
+}
+.todayLine b{color:var(--chalk);font-weight:600}
+
 /* ---- rank / gamification ---- */
 .rank{background:linear-gradient(160deg,var(--raise),var(--slate));border:1px solid var(--steel);
   border-radius:14px;padding:16px;margin-bottom:18px}
@@ -218,6 +250,7 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
 
   <!-- ================= TODAY ================= -->
   <section class="view on" id="v-today">
+    <div class="cal" id="cal"></div>
     <div class="rank" id="rank"></div>
     <div class="picker" id="picker">
       <button data-s="A" aria-pressed="true"><span class="let">A</span><span class="nm">Push</span></button>
@@ -392,6 +425,60 @@ function checkBadges(){
     setTimeout(()=>toast('🏅 '+fresh[0].n+' unlocked'),900);
   }
 }
+/* the 8-week schedule — A and B alternate week to week */
+const PLAN=[
+  ['A','C','','B','C','A',''],   // odd weeks
+  ['B','C','','A','C','B','']    // even weeks
+];
+const SNAME={A:'Push',B:'Pull',C:'Circuit'};
+function planFor(date){
+  const wk=Math.floor((new Date(date)-new Date(D.start))/6048e5);
+  const dow=(new Date(date).getDay()+6)%7;
+  return PLAN[Math.max(0,wk)%2][dow];
+}
+function renderCalendar(){
+  const DL=['M','T','W','T','F','S','S'];
+  const now=new Date();
+  const todayISO=now.toISOString().slice(0,10);
+  const dow=(now.getDay()+6)%7;
+  const mon=new Date(now); mon.setDate(now.getDate()-dow); mon.setHours(0,0,0,0);
+
+  let done=0, planned=0;
+  const cells=DL.map((lbl,i)=>{
+    const d=new Date(mon); d.setDate(mon.getDate()+i);
+    const iso=d.toISOString().slice(0,10);
+    const p=planFor(iso);
+    if(p)planned++;
+    const hit=D.sessions.some(s=>s.date===iso);
+    if(hit)done++;
+    const isToday=iso===todayISO;
+
+    let cls='day';
+    if(!p)cls+=' rest';
+    if(hit)cls+=' done';
+    if(isToday)cls+=' today';
+    else if(iso>todayISO)cls+=' future';
+
+    const badge = p
+      ? `<span class="sq ${p==='C'?'c':'s'}">${hit?'✓':p}</span>`
+      : `<span class="sq off">—</span>`;
+    return `<div class="${cls}"><span class="dl">${lbl}</span>${badge}<span class="dn">${d.getDate()}</span></div>`;
+  }).join('');
+
+  const todayPlan=planFor(todayISO);
+  const didToday=D.sessions.some(s=>s.date===todayISO);
+  let line;
+  if(didToday) line=`<b>✓ Done for today.</b>`;
+  else if(!todayPlan) line=`Rest day. Recovery is when you actually grow.`;
+  else line=`Today — <b>${todayPlan==='C'?'Circuit':'Session '+todayPlan+' · '+SNAME[todayPlan]}</b>`;
+
+  $('#cal').innerHTML=`
+    <div class="calTop"><b>This week</b><span>${done} of ${planned} done</span></div>
+    <div class="days">${cells}</div>
+    <div class="todayLine">${line}</div>`;
+  return todayPlan;
+}
+
 function renderRank(){
   const xp=calcXP(D), {r,next}=rankOf(xp);
   const floor=r.xp, ceil=next?next.xp:xp, pct=next?Math.round((xp-floor)/(ceil-floor)*100):100;
@@ -557,7 +644,7 @@ $('#saveBtn').onclick=()=>{
     rec.best={pullup:Math.max(0,...inputs.filter(i=>+i.dataset.e===pi).map(i=>+i.value||0))};
   }
   D.sessions.push(rec);save();
-  renderProgress();renderTop();renderRank();renderBadges();renderSession();
+  renderProgress();renderTop();renderCalendar();renderRank();renderBadges();renderSession();
   toast('Session saved');
   checkBadges();
 };
@@ -617,7 +704,15 @@ document.querySelectorAll('nav button').forEach(b=>{
     window.scrollTo(0,0);
   };
 });
-function renderAll(){renderTop();renderRank();renderSession();renderLadders();renderProgress();renderBadges();checkBadges();}
+function renderAll(){
+  renderTop();
+  const p=renderCalendar();
+  if(p){
+    cur=p;
+    document.querySelectorAll('#picker button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.s===p));
+  }
+  renderRank();renderSession();renderLadders();renderProgress();renderBadges();checkBadges();
+}
 renderAll();
 </script>
 </body>
