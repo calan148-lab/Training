@@ -1,7 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { Bars } from '../components/Bars';
 import { statusClass, statusLabel } from '../components/StatusStrip';
-import { mergeHealthDays, parseShortcutPayload } from '../health/shortcut';
+import {
+  diffHealthDays,
+  mergeHealthDays,
+  parseShortcutFiles,
+  parseShortcutPayload,
+} from '../health/shortcut';
 import type { ExportWorkerResponse } from '../health/exportWorker';
 import { todayISO } from '../domain/types';
 import { evaluateTargets, type TargetResult } from '../targets/engine';
@@ -34,15 +39,42 @@ export function Health({ store }: { store: Store }) {
   const verdict = useMemo(() => evaluateTargets(d, todayISO()), [d]);
   const dayCount = Object.keys(d.health.days).length;
 
+  /**
+   * Report what actually landed.
+   *
+   * The Shortcut emits a trailing window, so most imports are mostly days you
+   * already have. Leading with the new count keeps that legible — "2 updated"
+   * alone reads like something changed when nothing did.
+   */
+  const report = (days: Array<{ d: string }>, errors: string[] = []) => {
+    const { added, updated } = diffHealthDays(d, days);
+    const summary = added
+      ? `Imported ${added} new day${added === 1 ? '' : 's'}${updated ? `, ${updated} refreshed` : ''}`
+      : `Already up to date — ${updated} day${updated === 1 ? '' : 's'} rechecked`;
+    store.say(errors.length ? `${summary} · ${errors.length} file skipped` : summary);
+  };
+
   const importShortcut = (text: string) => {
     try {
       const payload = parseShortcutPayload(text);
+      report(payload.days);
       store.update((s) => mergeHealthDays(s, payload.days, 'shortcut'));
-      store.say(`Imported ${payload.days.length} day${payload.days.length === 1 ? '' : 's'}`);
       setPaste('');
     } catch (e) {
       store.say(e instanceof Error ? e.message : 'Import failed');
     }
+  };
+
+  /** Pick one file or a folder's worth; later files win on conflict. */
+  const importFiles = async (files: File[]) => {
+    const texts = await Promise.all(files.map((f) => f.text()));
+    const { days, errors } = parseShortcutFiles(texts);
+    if (!days.length) {
+      store.say(errors[0] ?? 'Nothing usable in those files');
+      return;
+    }
+    report(days, errors);
+    store.update((s) => mergeHealthDays(s, days, 'shortcut'));
   };
 
   const importExport = (file: File) => {
@@ -103,36 +135,45 @@ export function Health({ store }: { store: Store }) {
       </p>
 
       <h3 className="sub">Daily — the Shortcut</h3>
-      <textarea
-        className="paste"
-        placeholder='Paste the Shortcut output here, e.g. {"t":"health8w","v":1,"days":[…]}'
-        value={paste}
-        onChange={(e) => setPaste(e.target.value)}
-        rows={4}
-      />
-      <div className="wrow">
-        <button className="act" style={{ width: 'auto', padding: '12px 20px' }} onClick={() => importShortcut(paste)} disabled={!paste.trim()}>
-          Import pasted
-        </button>
-        <button className="ghost" onClick={() => jsonRef.current?.click()}>
-          Pick .json file
-        </button>
-      </div>
+      <button className="act" onClick={() => jsonRef.current?.click()}>
+        📂 Import from Files
+      </button>
       <input
         ref={jsonRef}
         type="file"
         accept="application/json,.json"
+        multiple
         hidden
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void f.text().then(importShortcut);
+          const files = [...(e.target.files ?? [])];
+          if (files.length) void importFiles(files);
           e.target.value = '';
         }}
       />
       <p className="note">
-        Build the Shortcut once — the recipe is in <code>HEALTH-SYNC.md</code>. Run it and the day's
-        numbers land in your clipboard, ready to paste here.
+        Build the Shortcut once — the recipe is in <code>HEALTH-SYNC.md</code>. It saves a JSON file
+        to iCloud Drive on a schedule; pick it here and you're done. Nothing leaves your phone. You
+        can select several files at once if you've been away, and re-importing a day you already have
+        is harmless.
       </p>
+
+      <details className="fold">
+        <summary>Paste instead</summary>
+        <textarea
+          className="paste"
+          placeholder='Paste the Shortcut output here, e.g. {"t":"health8w","v":1,"days":[…]}'
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+          rows={4}
+        />
+        <button
+          className="ghost"
+          onClick={() => importShortcut(paste)}
+          disabled={!paste.trim()}
+        >
+          Import pasted
+        </button>
+      </details>
 
       <h3 className="sub">One-off — full history</h3>
       <p className="note" style={{ margin: '0 0 10px' }}>

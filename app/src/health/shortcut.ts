@@ -32,11 +32,32 @@ const BOUNDS: Record<(typeof NUMERIC_FIELDS)[number], [number, number]> = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Coerce one raw entry into a validated day, or null if it has no usable date. */
+function readDay(entry: unknown): ShortcutDay | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const e = entry as Record<string, unknown>;
+  if (typeof e.d !== 'string' || !ISO_DATE.test(e.d)) return null;
+  const day: ShortcutDay = { d: e.d };
+  for (const f of NUMERIC_FIELDS) {
+    const v = e[f];
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const [lo, hi] = BOUNDS[f];
+    if (v < lo || v > hi) continue;
+    day[f] = v;
+  }
+  return day;
+}
+
 /**
  * Parse and validate a Shortcut payload.
  *
- * Fails loudly on a wrong tag or version: a Shortcut left on an old contract
- * should tell you so, not silently write nothing.
+ * Three shapes are accepted, because every action you have to add by hand in
+ * Shortcuts is another chance to get it wrong: the full wrapper, a bare array
+ * of days, or a single day object.
+ *
+ * The version check only applies when the wrapper is actually present — it
+ * exists so a Shortcut left on an old contract fails loudly rather than
+ * silently writing nothing, and a bare array makes no claim to check.
  */
 export function parseShortcutPayload(text: string): ShortcutPayload {
   let raw: unknown;
@@ -45,36 +66,78 @@ export function parseShortcutPayload(text: string): ShortcutPayload {
   } catch {
     throw new HealthImportError("That isn't valid JSON.");
   }
-  if (!raw || typeof raw !== 'object') throw new HealthImportError('Expected a JSON object.');
-  const o = raw as Partial<ShortcutPayload>;
-
-  if (o.t !== SHORTCUT_PAYLOAD_TAG) {
-    throw new HealthImportError(`Not a health payload (expected t="${SHORTCUT_PAYLOAD_TAG}").`);
+  if (!raw || typeof raw !== 'object') {
+    throw new HealthImportError('Expected a JSON object or array of days.');
   }
-  if (o.v !== SHORTCUT_PAYLOAD_VERSION) {
-    throw new HealthImportError(
-      `Shortcut is on payload v${o.v ?? '?'}, this app expects v${SHORTCUT_PAYLOAD_VERSION}. Update the Shortcut.`,
-    );
-  }
-  if (!Array.isArray(o.days)) throw new HealthImportError('Payload has no "days" array.');
 
-  const days: ShortcutDay[] = [];
-  for (const entry of o.days) {
-    if (!entry || typeof entry !== 'object') continue;
-    const e = entry as unknown as Record<string, unknown>;
-    if (typeof e.d !== 'string' || !ISO_DATE.test(e.d)) continue;
-    const day: ShortcutDay = { d: e.d };
-    for (const f of NUMERIC_FIELDS) {
-      const v = e[f];
-      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
-      const [lo, hi] = BOUNDS[f];
-      if (v < lo || v > hi) continue;
-      day[f] = v;
+  let entries: unknown[];
+
+  if (Array.isArray(raw)) {
+    entries = raw;
+  } else {
+    const o = raw as Partial<ShortcutPayload> & Record<string, unknown>;
+    if (o.t !== undefined || o.v !== undefined) {
+      // A wrapper that names itself must name itself correctly.
+      if (o.t !== SHORTCUT_PAYLOAD_TAG) {
+        throw new HealthImportError(`Not a health payload (expected t="${SHORTCUT_PAYLOAD_TAG}").`);
+      }
+      if (o.v !== SHORTCUT_PAYLOAD_VERSION) {
+        throw new HealthImportError(
+          `Shortcut is on payload v${o.v ?? '?'}, this app expects v${SHORTCUT_PAYLOAD_VERSION}. Update the Shortcut.`,
+        );
+      }
     }
-    days.push(day);
+    if (Array.isArray(o.days)) entries = o.days;
+    else if (typeof o.d === 'string') entries = [o];
+    else throw new HealthImportError('Payload has no "days" array.');
   }
+
+  const days = entries.map(readDay).filter((d): d is ShortcutDay => d !== null);
   if (!days.length) throw new HealthImportError('No usable days in that payload.');
-  return { t: o.t, v: o.v, days };
+  return { t: SHORTCUT_PAYLOAD_TAG, v: SHORTCUT_PAYLOAD_VERSION, days };
+}
+
+/**
+ * Parse several files at once and pool their days.
+ *
+ * Later files win on conflict, matching the merge order. Files that fail to
+ * parse are reported rather than silently dropped, so picking a stray file
+ * alongside good ones tells you which one was wrong.
+ */
+export function parseShortcutFiles(texts: string[]): { days: ShortcutDay[]; errors: string[] } {
+  const days: ShortcutDay[] = [];
+  const errors: string[] = [];
+  for (const text of texts) {
+    try {
+      days.push(...parseShortcutPayload(text).days);
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return { days, errors };
+}
+
+/**
+ * How an import would land: days not seen before, versus days already stored.
+ *
+ * Re-importing an overlapping window is harmless and expected — the Shortcut
+ * emits a trailing window so a missed day heals itself — but it should be
+ * visible that eight days arrived and only one was new.
+ */
+export function diffHealthDays(
+  data: AppData,
+  incoming: Array<{ d: string } & HealthDay>,
+): { added: number; updated: number } {
+  let added = 0;
+  let updated = 0;
+  const seen = new Set<string>();
+  for (const { d } of incoming) {
+    if (seen.has(d)) continue;
+    seen.add(d);
+    if (data.health.days[d]) updated++;
+    else added++;
+  }
+  return { added, updated };
 }
 
 /**

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { freshData } from '../domain/types';
-import { HealthImportError, mergeHealthDays, parseShortcutPayload } from './shortcut';
+import {
+  HealthImportError,
+  diffHealthDays,
+  mergeHealthDays,
+  parseShortcutFiles,
+  parseShortcutPayload,
+} from './shortcut';
 
 const ok = JSON.stringify({
   t: 'health8w',
@@ -79,5 +85,91 @@ describe('mergeHealthDays', () => {
     d = mergeHealthDays(d, [{ d: '2026-08-30', steps: 1 }, { d: '2026-08-31', steps: 2 }], 'shortcut');
     d = mergeHealthDays(d, [{ d: '2026-08-31', steps: 3 }], 'shortcut');
     expect(d.health.days['2026-08-30']!.steps).toBe(1);
+  });
+});
+
+describe('forgiving payload shapes', () => {
+  // Every action you add by hand in Shortcuts is a chance to get it wrong, so
+  // the simpler shapes a hand-built Shortcut is likely to emit all work.
+  it('accepts a bare array of days', () => {
+    const p = parseShortcutPayload('[{"d":"2026-08-31","wt":71.4},{"d":"2026-08-30","wt":71.2}]');
+    expect(p.days).toHaveLength(2);
+    expect(p.days[0]!.wt).toBe(71.4);
+  });
+
+  it('accepts a single day object', () => {
+    const p = parseShortcutPayload('{"d":"2026-08-31","steps":8412}');
+    expect(p.days).toEqual([{ d: '2026-08-31', steps: 8412 }]);
+  });
+
+  it('accepts a wrapper without the tag', () => {
+    expect(parseShortcutPayload('{"days":[{"d":"2026-08-31","wt":71.4}]}').days).toHaveLength(1);
+  });
+
+  it('still rejects a wrapper that claims the wrong version', () => {
+    // The version check is the point of the wrapper; a bare array makes no
+    // claim, but one that names itself must name itself correctly.
+    expect(() => parseShortcutPayload('{"t":"health8w","v":9,"days":[{"d":"2026-08-31"}]}'))
+      .toThrow(/Update the Shortcut/);
+  });
+
+  it('still rejects a wrapper claiming to be something else', () => {
+    expect(() => parseShortcutPayload('{"t":"other","v":1,"days":[]}')).toThrow(HealthImportError);
+  });
+
+  it('rejects a bare number or string', () => {
+    expect(() => parseShortcutPayload('42')).toThrow(/object or array/);
+    expect(() => parseShortcutPayload('"nope"')).toThrow(/object or array/);
+  });
+});
+
+describe('parseShortcutFiles', () => {
+  const day = (d: string, wt: number) => JSON.stringify({ t: 'health8w', v: 1, days: [{ d, wt }] });
+
+  it('pools days across files', () => {
+    const { days, errors } = parseShortcutFiles([day('2026-08-30', 71.2), day('2026-08-31', 71.4)]);
+    expect(days).toHaveLength(2);
+    expect(errors).toEqual([]);
+  });
+
+  it('keeps the good files when one is unusable', () => {
+    const { days, errors } = parseShortcutFiles([day('2026-08-30', 71.2), 'not json at all']);
+    expect(days).toHaveLength(1);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('reports every failure rather than only the first', () => {
+    const { days, errors } = parseShortcutFiles(['{oops', '{"t":"other","v":1,"days":[]}']);
+    expect(days).toEqual([]);
+    expect(errors).toHaveLength(2);
+  });
+});
+
+describe('diffHealthDays', () => {
+  it('separates new days from ones already stored', () => {
+    let d = freshData();
+    d = mergeHealthDays(d, [{ d: '2026-08-30', wt: 71.2 }], 'shortcut');
+    const diff = diffHealthDays(d, [
+      { d: '2026-08-30', wt: 71.25 },
+      { d: '2026-08-31', wt: 71.4 },
+    ]);
+    expect(diff).toEqual({ added: 1, updated: 1 });
+  });
+
+  it('counts a repeated date once', () => {
+    const diff = diffHealthDays(freshData(), [
+      { d: '2026-08-31', wt: 71.4 },
+      { d: '2026-08-31', steps: 8412 },
+    ]);
+    expect(diff).toEqual({ added: 1, updated: 0 });
+  });
+
+  it('reports nothing new when the whole window is already stored', () => {
+    // The Shortcut emits a trailing window, so re-importing is the normal case
+    // and must not look like a fresh import.
+    let d = freshData();
+    const week = ['2026-08-25', '2026-08-26', '2026-08-27'].map((x) => ({ d: x, steps: 8000 }));
+    d = mergeHealthDays(d, week, 'shortcut');
+    expect(diffHealthDays(d, week)).toEqual({ added: 0, updated: 3 });
   });
 });

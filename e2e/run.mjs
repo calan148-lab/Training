@@ -247,20 +247,45 @@ try {
   );
   await page.screenshot({ path: join(SHOTS, '2-targets.png'), fullPage: true });
 
-  console.log('\n4. Shortcut JSON import');
-  const payload = JSON.stringify({
+  console.log('\n4. Shortcut import via the Files route');
+  // The primary path: a file the Shortcut wrote to iCloud Drive, carrying a
+  // trailing window rather than a single day.
+  const rolling = JSON.stringify({
     t: 'health8w', v: 1,
-    days: [{ d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 }],
+    days: [
+      { d: '2026-08-31', wt: 71.8, steps: 8500 },
+      { d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+    ],
   });
-  await page.locator('textarea.paste').fill(payload);
-  await page.locator('button', { hasText: 'Import pasted' }).click();
-  check('shortcut import confirmed', await waitForToast(page, 'Imported').catch(() => false));
+  await page.locator('input[accept*="json"]').setInputFiles({
+    name: 'health.json', mimeType: 'application/json', buffer: Buffer.from(rolling),
+  });
+  check('file import confirmed', await waitForToast(page, 'new day').catch(() => false));
+  const importToast = await page.locator('.toast').textContent();
+  check('reports 1 new day and 1 refreshed', /1 new day/.test(importToast) && /1 refreshed/.test(importToast), importToast);
+
+  console.log('\n4b. Re-importing the same window is harmless and says so');
+  await page.locator('input[accept*="json"]').setInputFiles({
+    name: 'health.json', mimeType: 'application/json', buffer: Buffer.from(rolling),
+  });
+  check('repeat import reports no new days', await waitForToast(page, 'Already up to date').catch(() => false));
+
+  console.log('\n4c. Several files at once, for when you have been away');
+  await page.locator('input[accept*="json"]').setInputFiles([
+    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from('[{"d":"2026-07-10","steps":7000}]') },
+    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from('{"d":"2026-07-11","steps":7100}') },
+  ]);
+  check('multi-file, bare array and single object both accepted',
+    await waitForToast(page, '2 new days').catch(() => false));
+  const both = await waitForState(page, (x) => !!x.health.days['2026-07-10'] && !!x.health.days['2026-07-11'], 'multi-file merge');
+  check('both files landed with their values', both.health.days['2026-07-10'].steps === 7000 && both.health.days['2026-07-11'].steps === 7100);
 
   const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
     .health.days['2026-09-01'];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
-  console.log('\n5. Stale Shortcut version is rejected loudly');
+  console.log('\n5. Paste still works, and a stale Shortcut is rejected loudly');
+  await page.locator('.fold summary').click();
   await page.locator('textarea.paste').fill(JSON.stringify({ t: 'health8w', v: 99, days: [] }));
   await page.locator('button', { hasText: 'Import pasted' }).click();
   check('version mismatch surfaced', await waitForToast(page, 'Update the Shortcut').catch(() => false));

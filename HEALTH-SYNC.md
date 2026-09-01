@@ -9,7 +9,23 @@ export once to seed history.
 
 ## Route 1 — the Shortcut (daily)
 
-You build this once. After that it is one tap, or fully automatic.
+You build this once. After that it runs on a schedule and you pick one file.
+
+**Nothing leaves your phone.** The Shortcut writes a file to your own iCloud Drive;
+the app reads it locally. There is no server and no account anywhere in this path.
+
+### The one design decision that matters
+
+**Make the Shortcut emit a trailing window — the last 7 days — not just yesterday.**
+
+It costs nothing and it makes the whole thing self-healing. Miss a few days, go on
+holiday, forget the app exists for a week: the next single import backfills everything.
+Merging is idempotent and field-by-field, so re-importing days you already have is
+free — the app will tell you "2 new days, 5 updated" rather than pretending it did
+nothing.
+
+The alternative — emitting only yesterday — means every day you don't open the app is
+a day lost forever. Don't do that.
 
 ### What it has to produce
 
@@ -45,49 +61,67 @@ You build this once. After that it is one tap, or fully automatic.
 | `aen` | Active energy burned | kcal |
 | `wo` | Workouts recorded | count |
 
-**Every field except `d` is optional.** Leave out what you don't have. A missing key never
-erases what the app already stored, so a Shortcut that only reports body fat on days you
-used the scale is fine — that is the intended shape, not a compromise.
+**Every field except `d` is optional.** Leave out what you don't have. A missing key
+never erases what the app already stored, so a Shortcut that only reports body fat on
+days you used the scale is fine — that is the intended shape, not a compromise.
 
-Values outside plausible bounds are dropped rather than stored, so a Shortcut accidentally
-wired to grams won't corrupt your weight trend.
+**The wrapper is optional too.** All three of these are accepted, so there is less to
+get wrong by hand:
+
+```json
+{"t":"health8w","v":1,"days":[ … ]}     ← full form
+[ {"d":"2026-08-31","wt":71.4}, … ]      ← just the array
+{"d":"2026-08-31","wt":71.4}             ← a single day
+```
+
+If you *do* include `"t"` and `"v"`, they must be right — that check exists so a
+Shortcut left on an old contract fails loudly instead of silently writing nothing.
+
+Values outside plausible bounds are dropped rather than stored, so a Shortcut
+accidentally wired to grams won't corrupt your weight trend.
 
 ### Building it
 
 In the Shortcuts app, new shortcut, then:
 
-1. **Date** → set to yesterday (`Adjust Date` → subtract 1 day). Yesterday rather than today
-   because today's step count and active energy aren't finished yet.
-2. **Format Date** → `yyyy-MM-dd`. Store this in a variable named `Day`.
-3. For each metric you want, add **Find Health Samples**:
+1. **Repeat with Each** over the last 7 days. Simplest version: add a **Number** action
+   set to `7`, then **Repeat** that many times; inside the loop, take the current date,
+   **Adjust Date** by minus `Repeat Index` days, and **Format Date** as `yyyy-MM-dd`.
+2. Inside the loop, for each metric you want, add **Find Health Samples**:
    - Set the type (Body Mass, Resting Heart Rate, Steps, and so on).
-   - Filter `Start Date` `is today` relative to the date from step 1.
-   - Set **Sort by** `Start Date`, and choose the aggregation the app expects — *Average*
-     for resting heart rate and HRV, *Sum* for steps and active energy, *Latest* for body
-     mass and body fat.
-   - Store each result in its own variable.
-4. **Text** — assemble the JSON above, dropping in your variables.
-5. **Copy to Clipboard**, or **Save File** to iCloud Drive if you'd rather pick a file.
+   - Filter `Start Date` `is` the date from step 1.
+   - Choose the aggregation the app expects — *Average* for resting heart rate and
+     HRV, *Sum* for steps and active energy, *Latest* for body mass and body fat.
+3. **Text** — assemble one `{"d": …, …}` object per iteration.
+4. After the loop, **Combine Text** with `,` as separator, wrap in `[` `]`.
+5. **Save File** → iCloud Drive, a fixed path like `Shortcuts/health.json`,
+   with *Overwrite If File Exists* switched on.
 
-Then open the app, go to **Target**, and paste into the box (or pick the file).
+Overwriting one fixed file is deliberate: you always pick the same file, and because
+it carries a rolling week you never need to hunt for older ones.
 
-Exact action names shift between iOS releases; if one of the above isn't where this says,
-it will be within one menu of it.
+Then open the app → **Target** → **Import from Files** → pick `health.json`.
 
-### Making it automatic
+Exact action names shift between iOS releases; if one of the above isn't where this
+says, it will be within one menu of it.
+
+### Making it run on its own
 
 Shortcuts → **Automation** → new personal automation → **Time of Day**, early morning,
-run your shortcut. Set it to run without asking. The day's numbers are then on your
-clipboard when you next open the app.
+run your shortcut, and turn **Ask Before Running** off. The file is then always current
+when you open the app.
 
-### If the app says the Shortcut is out of date
+### If you've been away
 
-The `v` field is the contract version. If the app is bumped to `v: 2` and your Shortcut
-still sends `v: 1`, the import is refused with a message saying so. That is deliberate —
-a silent partial import is worse than a loud failure. Update the `Text` action to match
-the table above.
+Pick as many files as you like at once — the picker accepts multiple selection and
+pools them, later files winning on conflict. With the rolling-week Shortcut you
+shouldn't need this, but it's there if you ever switch to one-file-per-day.
 
----
+### Pasting instead
+
+The app still takes a paste, tucked under *Paste instead* on the Target tab. Swap the
+**Save File** action for **Copy to Clipboard** if you prefer that. It works identically —
+it's just one more manual step each time.
 
 ## Route 2 — the full export (once)
 

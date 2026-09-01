@@ -316,3 +316,9 @@ h3.sub{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:
 .totals span{font-family:var(--mono);font-size:11px;color:var(--dust)}
 .warnbox{border:1px solid var(--brass-dim);border-radius:10px;padding:11px 13px;background:var(--slate)}
 .log li button.ghost{padding:6px 11px;font-size:11px}
+.fold{margin-top:14px}
+.fold summary{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--dust);cursor:pointer;padding:8px 0;list-style:none}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary::before{content:'▸ ';color:var(--brass)}
+.fold[open] summary::before{content:'▾ '}
