@@ -156,6 +156,34 @@ these types are kept; everything else in the export is skipped:
 Pounds convert to kilograms and kilojoules to kilocalories automatically. `InBed` and
 `Awake` sleep records are ignored — only genuine asleep stages count.
 
+### More than one device
+
+Once you own a phone, a watch and a ring, several of them write the same metrics to
+Health. The Health app hides this by picking one source per data type; the raw export
+contains every record from every device, so the import has to resolve them itself:
+
+- **Totals** (steps, active energy, sleep, workouts) take the **largest single source**,
+  never the sum. Adding devices together turns one night watched by two of them into
+  sixteen hours of sleep.
+- **Averages** (resting heart rate, HRV) take the **source with the most samples** that
+  day, rather than blending. A ring and a watch measure resting heart rate differently,
+  and an average is a figure neither reported — one that shifts whenever a device misses
+  a day, which is exactly the drift the recovery target is watching for.
+- **Weight and body fat** take the latest reading, whichever device wrote it.
+
+This only affects the `export.xml` route. The Shortcut route asks Health for the value,
+and Health has already picked a source.
+
+### Adding an Oura ring
+
+Nothing to configure. Turn on Oura's Apple Health integration and it writes sleep, HRV,
+resting heart rate and activity into Health; the Shortcut reads Health, so it is picked
+up with no change. The rules above handle the overlap with an Apple Watch.
+
+Oura's own derived scores — readiness, sleep score, body temperature deviation — are not
+written to Health and would need Oura's cloud API, which means a server and data leaving
+the device. Not built, deliberately.
+
 The app keeps the most recent **400 days** and drops the rest, which is about 35 KB of
 storage. Importing a decade is safe; you just won't be able to scroll back a decade.
 

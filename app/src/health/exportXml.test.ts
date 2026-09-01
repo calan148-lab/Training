@@ -168,3 +168,85 @@ describe('parseHealthExport', () => {
     expect(days[0]).toMatchObject({ d: '2026-08-31', steps: 1234 });
   });
 });
+
+describe('multiple Health sources on one day', () => {
+  function run(xml: string) {
+    const acc = new HealthExportAccumulator();
+    acc.push(xml);
+    acc.end();
+    return { days: acc.result(), sources: acc.sources() };
+  }
+
+  const steps = (src: string, hour: string, v: string) =>
+    `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${src}" unit="count" startDate="2026-08-31 ${hour}:00:00 +0000" endDate="2026-08-31 ${hour}:59:00 +0000" value="${v}"/>`;
+
+  it('does not add step counts from two devices together', () => {
+    // A phone and a ring both tracking the same hour is one hour of walking,
+    // not two. Summing produced 15,800 steps from 8,000.
+    const { days } = run(steps('iPhone', '09', '8000') + steps('Oura', '09', '7800'));
+    expect(days[0]!.steps).toBe(8000);
+  });
+
+  it('still sums a single source across the day', () => {
+    const { days } = run(steps('iPhone', '09', '4000') + steps('iPhone', '18', '4412'));
+    expect(days[0]!.steps).toBe(8412);
+  });
+
+  it('picks the more complete source when both cover the day', () => {
+    const { days } = run(
+      steps('iPhone', '09', '3000') + steps('iPhone', '18', '3000') + steps('Oura', '09', '7800'),
+    );
+    expect(days[0]!.steps).toBe(7800);
+  });
+
+  it('does not add two devices watching the same night', () => {
+    // This is the one that matters: the old behaviour reported 16 hours,
+    // which is impossible and still inside the plausibility bounds.
+    const xml =
+      `<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Apple Watch" startDate="2026-08-30 23:00:00 +0000" endDate="2026-08-31 07:00:00 +0000" value="HKCategoryValueSleepAnalysisAsleepCore"/>` +
+      `<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Oura" startDate="2026-08-30 23:05:00 +0000" endDate="2026-08-31 07:05:00 +0000" value="HKCategoryValueSleepAnalysisAsleepCore"/>`;
+    const { days } = run(xml);
+    expect(days[0]!.sleep).toBeCloseTo(8, 1);
+  });
+
+  it('still sums sleep stages within one source', () => {
+    const stage = (from: string, to: string, kind: string) =>
+      `<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Oura" startDate="2026-08-30 ${from} +0000" endDate="2026-08-31 ${to} +0000" value="HKCategoryValueSleepAnalysis${kind}"/>`;
+    const xml =
+      stage('23:00:00', '03:00:00', 'AsleepCore') +
+      `<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Oura" startDate="2026-08-31 03:00:00 +0000" endDate="2026-08-31 06:30:00 +0000" value="HKCategoryValueSleepAnalysisAsleepREM"/>`;
+    expect(run(xml).days[0]!.sleep).toBeCloseTo(7.5, 1);
+  });
+
+  it('does not blend resting heart rate across devices', () => {
+    // A watch and a ring measure differently; averaging invents a figure
+    // neither reported, and the blend drifts when one device misses a day.
+    const rhr = (src: string, hour: string, v: string) =>
+      `<Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="${src}" unit="count/min" startDate="2026-08-31 ${hour}:00:00 +0000" endDate="2026-08-31 ${hour}:00:00 +0000" value="${v}"/>`;
+    // Oura reports twice, the watch once, so Oura is the better-covered source.
+    const { days } = run(rhr('Apple Watch', '04', '52') + rhr('Oura', '04', '48') + rhr('Oura', '05', '48'));
+    expect(days[0]!.rhr).toBe(48);
+  });
+
+  it('does not double-count a workout logged by two devices', () => {
+    const wo = (src: string) =>
+      `<Workout workoutActivityType="HKWorkoutActivityTypeTraditionalStrengthTraining" sourceName="${src}" duration="45" startDate="2026-08-31 17:00:00 +0000" endDate="2026-08-31 17:45:00 +0000"/>`;
+    expect(run(wo('Apple Watch') + wo('iPhone')).days[0]!.wo).toBe(1);
+  });
+
+  it('takes the latest weight regardless of which scale wrote it', () => {
+    const wt = (src: string, hour: string, v: string) =>
+      `<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="${src}" unit="kg" startDate="2026-08-31 ${hour}:00:00 +0000" endDate="2026-08-31 ${hour}:00:00 +0000" value="${v}"/>`;
+    expect(run(wt('Withings', '07', '71.0') + wt('Manual', '19', '71.6')).days[0]!.wt).toBe(71.6);
+  });
+
+  it('reports which sources it read', () => {
+    const { sources } = run(steps('iPhone', '09', '100') + steps('Oura', '09', '200'));
+    expect(sources).toEqual(['Oura', 'iPhone']);
+  });
+
+  it('handles records with no sourceName at all', () => {
+    const xml = `<Record type="HKQuantityTypeIdentifierStepCount" unit="count" startDate="2026-08-31 09:00:00 +0000" endDate="2026-08-31 10:00:00 +0000" value="500"/>`;
+    expect(run(xml).days[0]!.steps).toBe(500);
+  });
+});

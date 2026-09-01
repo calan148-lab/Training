@@ -10,19 +10,32 @@ import type { HealthDay } from '../domain/types';
  * boundaries.
  */
 
-interface DayAcc {
+/**
+ * One device's contribution to one day.
+ *
+ * Totals are accumulated per source rather than pooled, because a phone, a
+ * watch and a ring all write the same metrics to Health and the raw export
+ * contains every one of their records. Summing across sources double-counts:
+ * two devices tracking one night produced 16 hours of sleep, and one hour of
+ * walking produced 15,800 steps. Health's own UI hides this by picking a
+ * source per data type; the export does not.
+ */
+interface SourceAcc {
   /** Latest-timestamp-wins fields. */
   wt?: { v: number; ts: number };
   bf?: { v: number; ts: number };
-  /** Mean fields. */
+  /** Mean fields, kept with their sample count so a source can be ranked. */
   rhr?: { sum: number; n: number };
   hrv?: { sum: number; n: number };
-  /** Summed fields. */
+  /** Summed within this source only. */
   steps?: number;
   aen?: number;
   sleep?: number;
   wo?: number;
 }
+
+/** sourceName -> that source's totals for the day. */
+type DayAcc = Map<string, SourceAcc>;
 
 const TYPE_BODY_MASS = 'HKQuantityTypeIdentifierBodyMass';
 const TYPE_BODY_FAT = 'HKQuantityTypeIdentifierBodyFatPercentage';
@@ -86,13 +99,19 @@ export class HealthExportAccumulator {
   /** Records actually folded in, for the "imported N records" line. */
   records = 0;
 
-  private day(d: string): DayAcc {
-    let a = this.days.get(d);
-    if (!a) {
-      a = {};
-      this.days.set(d, a);
+  /** The accumulator for one day and one source, created on demand. */
+  private bucket(d: string, source: string): SourceAcc {
+    let day = this.days.get(d);
+    if (!day) {
+      day = new Map();
+      this.days.set(d, day);
     }
-    return a;
+    let acc = day.get(source);
+    if (!acc) {
+      acc = {};
+      day.set(source, acc);
+    }
+    return acc;
   }
 
   /** Feed one decoded chunk. Safe to call with arbitrary split points. */
@@ -141,7 +160,7 @@ export class HealthExportAccumulator {
     const a = attrs(body);
     const d = localDate(a.startDate);
     if (!d) return;
-    const acc = this.day(d);
+    const acc = this.bucket(d, a.sourceName ?? 'unknown');
     acc.wo = (acc.wo ?? 0) + 1;
     this.records++;
   }
@@ -158,7 +177,7 @@ export class HealthExportAccumulator {
       // Attribute a sleep block to the day you woke, matching how Health reports it.
       const d = localDate(a.endDate);
       if (!d) return;
-      const acc = this.day(d);
+      const acc = this.bucket(d, a.sourceName ?? 'unknown');
       acc.sleep = (acc.sleep ?? 0) + (end - start) / 3.6e6;
       this.records++;
       return;
@@ -168,7 +187,7 @@ export class HealthExportAccumulator {
     if (!Number.isFinite(value)) return;
     const d = localDate(a.startDate);
     if (!d) return;
-    const acc = this.day(d);
+    const acc = this.bucket(d, a.sourceName ?? 'unknown');
     const ts = parseStamp(a.startDate) ?? 0;
 
     switch (type) {
@@ -209,23 +228,75 @@ export class HealthExportAccumulator {
     this.records++;
   }
 
-  /** Collapse accumulators into day rollups, rounded to sensible precision. */
+  /**
+   * Collapse accumulators into day rollups, resolving multiple sources.
+   *
+   * Totals (steps, active energy, sleep, workouts) take the largest single
+   * source rather than adding sources together. Adding them is what produced
+   * a 16-hour night from two devices watching one sleep; the largest source
+   * is the most complete record of what actually happened, and can never
+   * exceed reality the way a sum does.
+   *
+   * Averages (resting HR, HRV) take the source with the most samples that day
+   * rather than blending devices. A phone and a ring measure resting heart
+   * rate differently, and averaging them invents a figure neither reported —
+   * worse, the blend shifts whenever one device happens to miss a day, which
+   * is exactly the drift the recovery baseline is trying to detect.
+   */
   result(): Array<{ d: string } & HealthDay> {
     const out: Array<{ d: string } & HealthDay> = [];
-    for (const [d, a] of [...this.days.entries()].sort(([x], [y]) => x.localeCompare(y))) {
+    for (const [d, sources] of [...this.days.entries()].sort(([x], [y]) => x.localeCompare(y))) {
       const day: { d: string } & HealthDay = { d };
-      if (a.wt) day.wt = round(a.wt.v, 2);
-      if (a.bf) day.bf = round(a.bf.v, 1);
-      if (a.rhr?.n) day.rhr = round(a.rhr.sum / a.rhr.n, 1);
-      if (a.hrv?.n) day.hrv = round(a.hrv.sum / a.hrv.n, 1);
-      if (a.sleep != null) day.sleep = round(a.sleep, 2);
-      if (a.steps != null) day.steps = Math.round(a.steps);
-      if (a.aen != null) day.aen = Math.round(a.aen);
-      if (a.wo != null) day.wo = a.wo;
+      const all = [...sources.values()];
+
+      // Latest reading wins outright, whichever device produced it.
+      const latest = <K extends 'wt' | 'bf'>(k: K) =>
+        all.reduce<{ v: number; ts: number } | undefined>(
+          (best, s) => (s[k] && (!best || s[k]!.ts >= best.ts) ? s[k] : best),
+          undefined,
+        );
+      const wt = latest('wt');
+      const bf = latest('bf');
+      if (wt) day.wt = round(wt.v, 2);
+      if (bf) day.bf = round(bf.v, 1);
+
+      // Largest single source, never the sum across sources.
+      const best = <K extends 'steps' | 'aen' | 'sleep' | 'wo'>(k: K) =>
+        all.reduce<number | undefined>(
+          (m, s) => (s[k] != null && (m == null || s[k]! > m) ? s[k] : m),
+          undefined,
+        );
+      const steps = best('steps');
+      const aen = best('aen');
+      const sleep = best('sleep');
+      const wo = best('wo');
+      if (sleep != null) day.sleep = round(sleep, 2);
+      if (steps != null) day.steps = Math.round(steps);
+      if (aen != null) day.aen = Math.round(aen);
+      if (wo != null) day.wo = wo;
+
+      // Mean within the best-covered source, not across sources.
+      const richest = <K extends 'rhr' | 'hrv'>(k: K) =>
+        all.reduce<{ sum: number; n: number } | undefined>(
+          (m, s) => (s[k]?.n && (!m || s[k]!.n > m.n) ? s[k] : m),
+          undefined,
+        );
+      const rhr = richest('rhr');
+      const hrv = richest('hrv');
+      if (rhr?.n) day.rhr = round(rhr.sum / rhr.n, 1);
+      if (hrv?.n) day.hrv = round(hrv.sum / hrv.n, 1);
+
       // A day with nothing but an unmatched marker is not worth storing.
       if (Object.keys(day).length > 1) out.push(day);
     }
     return out;
+  }
+
+  /** Distinct source names seen, so an import can say which devices it read. */
+  sources(): string[] {
+    const names = new Set<string>();
+    for (const day of this.days.values()) for (const n of day.keys()) names.add(n);
+    return [...names].sort();
   }
 }
 
