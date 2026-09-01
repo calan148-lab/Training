@@ -250,3 +250,67 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
 }
 .restBar button:active{background:var(--brass);color:#15181C;border-color:var(--brass)}
 .note{font-size:12px;color:var(--dust);line-height:1.55;margin:14px 0 0}
+
+/* ---- added for targets, meals and the wider nav ---- */
+.boot{padding:40px 18px;color:var(--dust);font-family:var(--mono);font-size:13px}
+
+/* six tabs need to fit a phone, so the labels shrink rather than wrap */
+nav{display:flex}
+nav button{flex:1;min-width:0;font-size:10px;letter-spacing:.04em;padding:0 2px}
+
+.strip{display:block;padding:12px 14px;border-radius:11px;margin:0 0 16px;border:1px solid var(--steel);background:var(--slate)}
+.strip b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase}
+.strip span{display:block;font-size:12px;color:var(--dust);line-height:1.5;margin-top:4px}
+.strip.good{border-color:var(--good)}
+.strip.good b{color:var(--good)}
+.strip.bad{border-color:var(--bad)}
+.strip.bad b{color:var(--bad)}
+.strip.dim b{color:var(--dust)}
+
+.verdict{background:var(--raise);border:1px solid var(--steel);border-radius:12px;padding:16px;margin-bottom:20px}
+.verdict b{font-family:var(--display);font-weight:900;font-size:22px;letter-spacing:-.01em;display:block}
+.verdict p{margin:8px 0 0;font-size:13px;color:var(--chalk);line-height:1.55}
+.verdict.good{border-color:var(--good)}
+.verdict.good b{color:var(--good)}
+.verdict.bad{border-color:var(--bad)}
+.verdict.bad b{color:var(--bad)}
+.verdict.dim b{color:var(--dust);font-size:16px}
+
+.target{background:var(--slate);border:1px solid var(--steel);border-left-width:3px;border-radius:11px;padding:13px 14px;margin-bottom:10px}
+.target.good{border-left-color:var(--good)}
+.target.bad{border-left-color:var(--bad)}
+.target.warn{border-left-color:var(--warn)}
+.target.dim{border-left-color:var(--steel);opacity:.72}
+.target-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.target-name{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.13em;text-transform:uppercase}
+.chip{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:20px;border:1px solid var(--steel);color:var(--dust);white-space:nowrap}
+.chip.good{color:var(--good);border-color:var(--good)}
+.chip.bad{color:var(--bad);border-color:var(--bad)}
+.chip.warn{color:var(--warn);border-color:var(--warn)}
+.target-val{display:flex;align-items:baseline;gap:10px;margin:8px 0 4px;flex-wrap:wrap}
+.target-val b{font-family:var(--display);font-weight:900;font-size:21px;letter-spacing:-.01em}
+.target-val span{font-family:var(--mono);font-size:11px;color:var(--dust)}
+.target-note{margin:8px 0 0;font-size:12.5px;color:var(--dust);line-height:1.55}
+.target .bars{height:34px;margin:8px 0 2px}
+
+h3.sub{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:22px 0 10px}
+.paste{width:100%;background:var(--slate);border:1px solid var(--steel);border-radius:10px;color:var(--chalk);
+  font-family:var(--mono);font-size:13px;padding:11px 12px;margin-bottom:9px;resize:vertical}
+.paste:focus{outline:none;border-color:var(--brass)}
+.wrow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.wrow input{flex:1;min-width:80px;background:var(--slate);border:1px solid var(--steel);border-radius:10px;
+  color:var(--chalk);font-family:var(--mono);font-size:15px;padding:11px 12px}
+.wrow input:focus{outline:none;border-color:var(--brass)}
+
+.confirm{background:var(--raise);border:1px solid var(--brass-dim);border-radius:12px;padding:14px;margin-bottom:16px}
+.mealshot{width:100%;border-radius:10px;margin-bottom:12px;display:block}
+.lowconf{color:var(--warn);font-style:normal}
+.assume{background:var(--slate);border-radius:10px;padding:11px 13px;margin:10px 0}
+.assume b{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--warn)}
+.assume ul{margin:7px 0 0;padding-left:17px}
+.assume li{font-size:12px;color:var(--dust);line-height:1.55;margin-bottom:3px}
+.totals{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-top:1px solid var(--steel);margin-top:10px}
+.totals b{font-family:var(--display);font-weight:900;font-size:24px}
+.totals span{font-family:var(--mono);font-size:11px;color:var(--dust)}
+.warnbox{border:1px solid var(--brass-dim);border-radius:10px;padding:11px 13px;background:var(--slate)}
+.log li button.ghost{padding:6px 11px;font-size:11px}

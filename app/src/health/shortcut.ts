@@ -61,7 +61,7 @@ export function parseShortcutPayload(text: string): ShortcutPayload {
   const days: ShortcutDay[] = [];
   for (const entry of o.days) {
     if (!entry || typeof entry !== 'object') continue;
-    const e = entry as Record<string, unknown>;
+    const e = entry as unknown as Record<string, unknown>;
     if (typeof e.d !== 'string' || !ISO_DATE.test(e.d)) continue;
     const day: ShortcutDay = { d: e.d };
     for (const f of NUMERIC_FIELDS) {
