@@ -10,6 +10,7 @@
     "dev": "npm run dev -w app",
     "build": "npm run build -w app",
     "test": "npm run test -w app",
+    "e2e": "node e2e/run.mjs",
     "typecheck": "npm run typecheck -w app"
   },
   "devDependencies": {
