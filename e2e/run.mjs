@@ -7,7 +7,8 @@
  */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 
 const DIST = resolve('app/dist');
@@ -46,6 +47,21 @@ async function readState(page) {
     db.close();
     return row?.data ?? null;
   });
+}
+
+/**
+ * Wait for the toast to carry a given substring.
+ *
+ * The toast is one element whose text is replaced in place, so asserting on it
+ * after a fixed delay races the previous message. Poll for the text instead.
+ */
+async function waitForToast(page, substring, timeoutMs = 10000) {
+  await page.waitForFunction(
+    (want) => document.querySelector('.toast')?.textContent?.includes(want) ?? false,
+    substring,
+    { timeout: timeoutMs },
+  );
+  return true;
 }
 
 async function waitForState(page, predicate, label, timeoutMs = 20000) {
@@ -106,7 +122,39 @@ function buildExportXml() {
 await mkdir(SHOTS, { recursive: true });
 await new Promise((r) => server.listen(PORT, r));
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+/**
+ * Launch Chromium wherever it happens to live.
+ *
+ * On CI, `playwright install` puts the build this package expects in the
+ * default cache and the plain launch works. Some prebuilt images instead ship
+ * a differently-versioned Chromium under PLAYWRIGHT_BROWSERS_PATH, which the
+ * default resolution misses because the build number doesn't match. Hardcoding
+ * either path breaks the other environment, so try the default and fall back
+ * to whatever chromium build is actually on disk.
+ */
+async function launchChromium() {
+  try {
+    return await chromium.launch();
+  } catch (err) {
+    const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
+    if (!existsSync(root)) throw err;
+    const candidates = [];
+    for (const dir of await readdir(root)) {
+      if (!dir.startsWith('chromium')) continue;
+      candidates.push(
+        join(root, dir, 'chrome-linux', 'chrome'),
+        join(root, dir, 'chrome-linux', 'headless_shell'),
+        join(root, dir, 'chrome-headless-shell-linux64', 'chrome-headless-shell'),
+      );
+    }
+    const found = candidates.find((p) => existsSync(p));
+    if (!found) throw err;
+    console.log(`   [using bundled chromium at ${found}]`);
+    return chromium.launch({ executablePath: found });
+  }
+}
+
+const browser = await launchChromium();
 const ctx = await browser.newContext({ viewport: { width: 414, height: 896 }, deviceScaleFactor: 2 });
 const page = await ctx.newPage();
 
@@ -206,8 +254,7 @@ try {
   });
   await page.locator('textarea.paste').fill(payload);
   await page.locator('button', { hasText: 'Import pasted' }).click();
-  await page.waitForSelector('.toast.show');
-  check('shortcut import confirmed', (await page.locator('.toast').innerText()).includes('Imported'));
+  check('shortcut import confirmed', await waitForToast(page, 'Imported').catch(() => false));
 
   const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
     .health.days['2026-09-01'];
@@ -216,8 +263,7 @@ try {
   console.log('\n5. Stale Shortcut version is rejected loudly');
   await page.locator('textarea.paste').fill(JSON.stringify({ t: 'health8w', v: 99, days: [] }));
   await page.locator('button', { hasText: 'Import pasted' }).click();
-  await page.waitForTimeout(300);
-  check('version mismatch surfaced', (await page.locator('.toast').innerText()).includes('Update the Shortcut'));
+  check('version mismatch surfaced', await waitForToast(page, 'Update the Shortcut').catch(() => false));
 
   console.log('\n6. Existing training features still work');
   await page.locator('nav button', { hasText: 'Ladders' }).click();
