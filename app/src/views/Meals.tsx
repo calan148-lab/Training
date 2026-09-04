@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deletePhoto, getPhoto, putPhoto } from '../db';
+import { SupplementManager } from './Supplements';
 import { todayISO, type Meal, type MealItem } from '../domain/types';
 import { intakeByDay } from '../targets/engine';
 import {
@@ -261,6 +262,7 @@ export function Meals({ store }: { store: Store }) {
             type="file"
             accept="image/*"
             capture="environment"
+            data-capture="meal"
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -314,6 +316,8 @@ export function Meals({ store }: { store: Store }) {
           </li>
         )}
       </ul>
+
+      <SupplementManager store={store} />
     </section>
   );
 }

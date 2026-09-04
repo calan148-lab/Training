@@ -1,4 +1,4 @@
-import type { Meal, MealItem, MealTotals, Settings } from '../domain/types';
+import type { Meal, MealItem, MealTotals, Settings, SupplementKind } from '../domain/types';
 
 /** Longest edge, in pixels, that we upload. */
 export const MAX_EDGE = 1024;
@@ -7,6 +7,24 @@ export const JPEG_QUALITY = 0.8;
 export interface MealEstimate {
   items: MealItem[];
   total: MealTotals;
+  assumptions: string[];
+  usage?: Record<string, number>;
+}
+
+/** What the model reports from a supplement label. Nulls mean "not stated". */
+export interface SupplementEstimate {
+  name: string;
+  brand: string;
+  kind: SupplementKind;
+  servingLabel: string;
+  servingsPerContainer: number | null;
+  kcal: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  caffeine_mg: number | null;
+  creatine_g: number | null;
+  confidence: number;
   assumptions: string[];
   usage?: Record<string, number>;
 }
@@ -69,21 +87,28 @@ export function settingsReady(s: Settings): boolean {
   return Boolean(s.workerUrl && s.workerToken);
 }
 
-/** Send one photo for estimation. Throws VisionError with a retryable flag. */
-export async function estimateMeal(
+/**
+ * Downscale a photo, send it to one Worker route, and return the parsed body.
+ *
+ * Shared by both routes because everything that can go wrong here — offline,
+ * a bad token, a rate limit, a 5xx — is identical whichever panel is in frame,
+ * and the retryable/not distinction is the part callers actually depend on.
+ */
+async function postPhoto(
+  path: string,
   photo: Blob,
   settings: Settings,
   hint?: string,
-): Promise<MealEstimate> {
+): Promise<unknown> {
   if (!settingsReady(settings)) {
-    throw new VisionError('Photo calories need a server. Add one in Settings.', false);
+    throw new VisionError('Photo recognition needs a server. Add one in Settings.', false);
   }
   const small = await downscale(photo);
   const image = await blobToBase64(small);
 
   let res: Response;
   try {
-    res = await fetch(`${settings.workerUrl!.replace(/\/$/, '')}/meal`, {
+    res = await fetch(`${settings.workerUrl!.replace(/\/$/, '')}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,8 +138,37 @@ export async function estimateMeal(
     throw new VisionError(detail || `Server returned ${res.status}.`, retryable);
   }
 
-  const data = (await res.json()) as MealEstimate;
+  return await res.json();
+}
+
+/** Send one meal photo for estimation. Throws VisionError with a retryable flag. */
+export async function estimateMeal(
+  photo: Blob,
+  settings: Settings,
+  hint?: string,
+): Promise<MealEstimate> {
+  const data = (await postPhoto('/meal', photo, settings, hint)) as MealEstimate;
   if (!Array.isArray(data.items) || !data.total) {
+    throw new VisionError('Server sent back something unexpected.', false);
+  }
+  return data;
+}
+
+/**
+ * Read one supplement label.
+ *
+ * The label is read once and its numbers reused for every dose, so a misread is
+ * repeated daily rather than averaged away. Anything the model could not read
+ * comes back null and stays null — the confirmation screen asks you for it
+ * rather than inventing a plausible figure.
+ */
+export async function estimateSupplement(
+  photo: Blob,
+  settings: Settings,
+  hint?: string,
+): Promise<SupplementEstimate> {
+  const data = (await postPhoto('/supplement', photo, settings, hint)) as SupplementEstimate;
+  if (typeof data?.name !== 'string' || typeof data?.kind !== 'string') {
     throw new VisionError('Server sent back something unexpected.', false);
   }
   return data;

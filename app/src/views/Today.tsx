@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LADDERS, SESSIONS, SNAME } from '../domain/plan';
 import { calcXP, planFor, rankOf, thisWeekCount, weekNo } from '../domain/progress';
+import { SupplementDoses } from './Supplements';
 import type { AppData, LadderKey, SessionType } from '../domain/types';
 import { todayISO } from '../domain/types';
 import { evaluateTargets } from '../targets/engine';
@@ -268,6 +269,8 @@ export function Today({ store }: { store: Store }) {
           </button>
         </div>
       )}
+
+      <SupplementDoses store={store} />
 
       <button className="act" style={{ marginTop: 14 }} onClick={save}>
         Save session

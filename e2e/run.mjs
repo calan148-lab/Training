@@ -181,7 +181,11 @@ try {
   check('ladder rungs migrated', stored?.ladders?.squat === 4, `got ${stored?.ladders?.squat}`);
   check('weigh-ins migrated', stored?.weights?.length === 2);
   check('best pull-ups preserved', stored?.sessions?.[0]?.best?.pullup === 8);
-  check('schema stamped v2', stored?.v === 2, `got ${stored?.v}`);
+  check('schema stamped v3', stored?.v === 3, `got ${stored?.v}`);
+  // v3 added supplements. A v1 payload has neither key, and the migration has to
+  // supply both — a missing array crashes the first render, not the first dose.
+  check('supplement arrays present after migrating a v1 payload',
+    Array.isArray(stored?.supplements) && Array.isArray(stored?.doses));
   check('legacy payload left intact', await page.evaluate(() => !!localStorage.getItem('calis8w')));
   check('legacy backup written', await page.evaluate(() => !!localStorage.getItem('calis8w.v1.backup')));
   check('session count shown in header', (await page.locator('.weekmeta').first().innerText()).includes('3 session'));
@@ -355,7 +359,7 @@ try {
     '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
     'base64',
   );
-  await page.locator('input[accept="image/*"]').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+  await page.locator('input[data-capture="meal"]').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer: jpeg });
   await page.waitForSelector('.confirm', { timeout: 20000 });
   check('estimate comes back for confirmation', true);
   check('items listed', (await page.locator('.confirm .ex').count()) === 2, `${await page.locator('.confirm .ex').count()}`);

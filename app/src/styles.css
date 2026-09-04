@@ -322,3 +322,30 @@ h3.sub{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:
 .fold summary::-webkit-details-marker{display:none}
 .fold summary::before{content:'▸ ';color:var(--brass)}
 .fold[open] summary::before{content:'▾ '}
+
+/* ---- supplements ---- */
+.numfield{display:block;margin-bottom:10px}
+.numfield>span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--dust);margin-bottom:5px}
+.numfield input{width:100%;box-sizing:border-box;background:var(--slate);color:var(--chalk);
+  border:1px solid var(--steel);border-radius:9px;padding:11px 12px;font-size:15px;font-family:var(--body)}
+.numfield input:focus{outline:none;border-color:var(--brass)}
+.numgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+
+.supps{background:var(--raise);border:1px solid var(--steel);border-radius:12px;
+  padding:13px 14px;margin-top:16px}
+.suppRow{display:flex;align-items:stretch;gap:8px;margin-top:9px}
+.suppTake{flex:1;display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:var(--slate);border:1px solid var(--steel);border-radius:10px;
+  padding:12px 13px;text-align:left;cursor:pointer;color:var(--chalk);font-family:var(--body)}
+.suppTake:active{transform:translateY(1px)}
+.suppRow.done .suppTake{border-color:var(--good)}
+.suppName{font-size:14px;font-weight:600}
+.suppMeta{font-family:var(--mono);font-size:11px;color:var(--dust);white-space:nowrap}
+.suppRow.done .suppMeta{color:var(--good)}
+.suppUndo{width:46px;flex:none;font-size:18px;line-height:1;padding:0}
+
+/* A capture control is a <label> wrapping a hidden input, so it needs the
+   disabled look applied by hand — there is no :disabled on a label. */
+.act.disabled{opacity:.5;pointer-events:none}
+label.act{display:block;text-align:center;cursor:pointer}
