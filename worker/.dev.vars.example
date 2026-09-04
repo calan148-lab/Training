@@ -1,0 +1,20 @@
+# Template for worker/.dev.vars — copy it, then fill in your own values:
+#
+#   cp worker/.dev.vars.example worker/.dev.vars
+#
+# .dev.vars is gitignored and is for LOCAL `wrangler dev` only. The deployed
+# Worker never reads it: production secrets are set once, out of band, with
+#
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put APP_TOKEN
+#
+# Keep it that way. A key committed to a repo is a key you have to rotate, and
+# this repo is public.
+
+# From console.anthropic.com. Placeholder — replace, never commit the real one.
+ANTHROPIC_API_KEY=sk-ant-REPLACE-ME
+
+# Any long random string. The app sends it as a bearer token; the Worker
+# rejects anything else, which is what stops a stranger who finds the URL from
+# spending your credit.
+APP_TOKEN=local-dev-REPLACE-ME

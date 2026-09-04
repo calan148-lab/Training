@@ -122,12 +122,21 @@ npm run dev            # the app, on :5173
 npm run dev -w worker  # the Worker, on :8787
 ```
 
-For the local Worker, put the secrets in `worker/.dev.vars` (gitignored):
+For the local Worker, copy the template and fill it in — `.dev.vars` is gitignored,
+`.dev.vars.example` is the committed placeholder:
+
+```bash
+cp worker/.dev.vars.example worker/.dev.vars
+```
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 APP_TOKEN=anything-for-local
 ```
+
+This file is for `wrangler dev` only. The deployed Worker never reads it — production
+secrets are set with `wrangler secret put`, so the real key has no committed home in
+this repo and nothing to leak if the repo is public.
 
 Then set the app's Setup tab to `http://localhost:8787`.
 
