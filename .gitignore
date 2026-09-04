@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.dev.vars
+.wrangler/
+coverage/
+test-results/
+playwright-report/
+e2e/shots/
+*.local

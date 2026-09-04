@@ -1,0 +1,19 @@
+name = "training-meals"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+# The exact origin of your deployed app. Leave unset only for local testing.
+# ALLOWED_ORIGIN = "https://calan148-lab.github.io"
+
+# Secrets are NEVER set here. Use:
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put APP_TOKEN
+
+# Optional speed bump. The real backstop is a spend limit in the Anthropic
+# Console — set one regardless of whether this binding exists.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
