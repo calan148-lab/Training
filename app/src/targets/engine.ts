@@ -1,4 +1,10 @@
 import { allWeights } from '../domain/progress';
+import {
+  creatineConfounds,
+  dosesOfKind,
+  lateStimulantDoses,
+  nutritiveByDay,
+} from '../domain/supplements';
 import type { AppData, HealthDay, Meal } from '../domain/types';
 import { todayISO } from '../domain/types';
 
@@ -117,14 +123,42 @@ export function confirmedMeals(data: AppData): Meal[] {
   return data.meals.filter((m) => m.status === 'confirmed');
 }
 
-/** Per-day intake totals from confirmed meals. */
-export function intakeByDay(data: AppData): Map<string, { kcal: number; protein: number }> {
-  const out = new Map<string, { kcal: number; protein: number }>();
+export interface DayIntake {
+  kcal: number;
+  protein: number;
+  /**
+   * Whether the day has at least one confirmed meal behind it.
+   *
+   * A day whose only entry is a protein shake is not a record of what you ate.
+   * Counting it as a logged day would drag the 14-day mean down and, because
+   * maintenance is derived from that mean, mis-state the calorie target the
+   * whole plan steers by. Supplements add to a day's totals; they cannot on
+   * their own make a day countable.
+   */
+  hasMeal: boolean;
+}
+
+/** Per-day intake from confirmed meals plus nutritive supplement doses. */
+export function intakeByDay(data: AppData): Map<string, DayIntake> {
+  const out = new Map<string, DayIntake>();
+  const at = (date: string): DayIntake => {
+    let cur = out.get(date);
+    if (!cur) {
+      cur = { kcal: 0, protein: 0, hasMeal: false };
+      out.set(date, cur);
+    }
+    return cur;
+  };
   for (const m of confirmedMeals(data)) {
-    const cur = out.get(m.date) ?? { kcal: 0, protein: 0 };
+    const cur = at(m.date);
     cur.kcal += m.totals.kcal;
     cur.protein += m.totals.protein_g;
-    out.set(m.date, cur);
+    cur.hasMeal = true;
+  }
+  for (const [date, v] of nutritiveByDay(data)) {
+    const cur = at(date);
+    cur.kcal += v.kcal;
+    cur.protein += v.protein;
   }
   return out;
 }
@@ -133,7 +167,7 @@ export function intakeByDay(data: AppData): Map<string, { kcal: number; protein:
 function intakeWindow(data: AppData, days: number, end: string): DatedValue[] {
   const from = shiftDate(end, -(days - 1));
   return [...intakeByDay(data).entries()]
-    .filter(([d]) => d >= from && d <= end)
+    .filter(([d, v]) => v.hasMeal && d >= from && d <= end)
     .map(([date, v]) => ({ date, v: v.kcal }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -141,7 +175,7 @@ function intakeWindow(data: AppData, days: number, end: string): DatedValue[] {
 function proteinWindow(data: AppData, days: number, end: string): DatedValue[] {
   const from = shiftDate(end, -(days - 1));
   return [...intakeByDay(data).entries()]
-    .filter(([d]) => d >= from && d <= end)
+    .filter(([d, v]) => v.hasMeal && d >= from && d <= end)
     .map(([date, v]) => ({ date, v: v.protein }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -215,6 +249,17 @@ export function weightTrendTarget(data: AppData, end: string): TargetResult {
         ? `${display} is faster than a lean gain. Check body fat — some of this is likely fat.`
         : `${display} is above the band.`;
   }
+  // While creatine is saturating, the scale is carrying water that is not fat.
+  // Reporting this as pass/fail would either credit a stall as progress or, on a
+  // cut, call a perfectly good week a failure — so it drops to context until the
+  // water has landed and the slope means something again.
+  if (creatineConfounds(data, win[0]!.date, win[win.length - 1]!.date)) {
+    return {
+      id, name, status: 'info', display, value, band: band.label,
+      note: `${display} over ${spanDays} days, but you started creatine inside this window. Creatine pulls water into muscle — expect 1-2 kg on the scale that is not fat. Judge the next few weeks on waist and body fat, not weight.`,
+      series: win.map((p) => p.v), priority: 100,
+    };
+  }
   return { id, name, status, display, value, band: band.label, note, series: win.map((p) => p.v), priority: 100 };
 }
 
@@ -272,9 +317,17 @@ export function estimateMaintenance(data: AppData, end: string): MaintenanceEsti
   );
   // Needs a fortnight's worth of logged days and a real weight trend to mean anything.
   if (intake.length >= 14 && weights.length >= 3 && daysBetween(weights[0]!.date, weights[weights.length - 1]!.date) >= 14) {
+    // Creatine saturation is the one thing that breaks this derivation outright.
+    // Maintenance here is `intake − slope × 7700`, so water weight enters the
+    // estimate as though it were banked energy: a false +1.5 kg over 28 days is
+    // a slope of 0.054 kg/day, which is ~410 kcal/day of energy that was never
+    // eaten. The estimate would come back that much too high and quietly hand
+    // back the entire deficit. A formula estimate is worse in general and far
+    // better here, because it does not read the scale at all.
+    const confounded = creatineConfounds(data, weights[0]!.date, weights[weights.length - 1]!.date);
     const perDay = slopePerDay(weights);
     const avgIntake = mean(intake.map((p) => p.v));
-    if (perDay != null && avgIntake != null) {
+    if (!confounded && perDay != null && avgIntake != null) {
       return { kcal: Math.round(avgIntake - perDay * KCAL_PER_KG), basis: 'empirical' };
     }
   }
@@ -495,10 +548,18 @@ export function recoveryTarget(data: AppData, end: string): TargetResult {
   const display = parts.join(' · ');
 
   if (flags.length) {
+    // A stimulant raises resting heart rate and suppresses HRV directly — the
+    // same fingerprint this target reads as accumulated fatigue. Telling you to
+    // take an easy week when the cause is a pre-workout would cost training for
+    // nothing, so the dose count goes in the note and you decide.
+    const stims = dosesOfKind(data, 'stimulant', shiftDate(end, -6), end).length;
+    const caveat = stims
+      ? ` You logged ${stims} stimulant dose${stims === 1 ? '' : 's'} this week — caffeine moves both of these numbers on its own, so some of this is the supplement rather than your training.`
+      : '';
     return {
       id, name, status: 'high',
       display, value: rhrDelta != null ? Math.round(rhrDelta * 100) : null, band,
-      note: `${flags.join(' and ')} against your own baseline. Usually sleep, stress, or too much training — take an easy week.`,
+      note: `${flags.join(' and ')} against your own baseline. Usually sleep, stress, or too much training — take an easy week.${caveat}`,
       series: windowOf(healthSeries(data, 'rhr'), 28, end).map((p) => p.v),
       priority: 75,
     };
@@ -522,12 +583,19 @@ export function sleepTarget(data: AppData, end: string): TargetResult {
   const value = Math.round(avg * 10) / 10;
   const display = `${value.toFixed(1)} h`;
   const status: TargetStatus = avg >= 7 ? 'in' : 'low';
+  // Caffeine's half-life is five to six hours, so an afternoon pre-workout still
+  // has half its load on board at bedtime. When sleep is short and late doses
+  // exist, that is the first thing to try moving.
+  const late = status === 'low' ? lateStimulantDoses(data, shiftDate(end, -6), end).length : 0;
+  const lateNote = late
+    ? ` ${late} of your stimulant dose${late === 1 ? ' was' : 's were'} taken after 16:00 — caffeine is still half on board six hours later. Move it earlier before changing anything else.`
+    : '';
   return {
     id, name, status, display, value, band,
     note:
       status === 'in'
         ? `${display} a night across ${win.length} nights. Enough to recover on.`
-        : `${display} a night. Under 7 h blunts both recovery and the gain — this is the cheapest fix on this page.`,
+        : `${display} a night. Under 7 h blunts both recovery and the gain — this is the cheapest fix on this page.${lateNote}`,
     series: win.map((p) => p.v), priority: 65,
   };
 }

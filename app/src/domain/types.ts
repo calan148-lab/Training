@@ -100,6 +100,58 @@ export interface Meal {
   attempts?: number;
 }
 
+/**
+ * How a supplement interacts with the targets.
+ *
+ * This is why supplements are modelled rather than merely photographed: each
+ * kind distorts a different target, and an engine that does not know what you
+ * are taking will confidently mis-read its own numbers. Protein powder that
+ * never reaches the intake totals makes the protein target read low and drags
+ * measured maintenance down with it; creatine moves scale weight by pulling in
+ * water, which the weight trend cannot tell from fat.
+ */
+export type SupplementKind =
+  /** Contributes calories and macros — has to reach the intake totals. */
+  | 'nutritive'
+  /** Saturates muscle with water, moving scale weight independently of fat. */
+  | 'creatine'
+  /** Raises resting heart rate, suppresses HRV, and costs sleep taken late. */
+  | 'stimulant'
+  /** Logged for adherence only; touches no target. */
+  | 'other';
+
+/** A product you own. Photographed once, then logged by tap. */
+export interface Supplement {
+  id: string;
+  name: string;
+  brand?: string;
+  kind: SupplementKind;
+  /** How one serving is described on the tub, e.g. "1 scoop (30 g)". */
+  servingLabel: string;
+  /** Per serving. Only meaningful when kind is 'nutritive'. */
+  kcal?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  /** Per serving. Drives the stimulant and creatine annotations. */
+  caffeine_mg?: number;
+  creatine_g?: number;
+  /** Key into the photo store — the label shot, kept once per product. */
+  photoId?: string;
+  addedAt: string;
+}
+
+/** One taking of one supplement. */
+export interface SupplementDose {
+  id: string;
+  supplementId: string;
+  /** ISO date the dose is attributed to. */
+  date: string;
+  /** Full timestamp. A stimulant at 19:00 means what one at 07:00 does not. */
+  at: string;
+  servings: number;
+}
+
 export type Goal = 'gain' | 'recomp' | 'cut';
 
 export interface Profile {
@@ -132,10 +184,14 @@ export interface AppData {
   profile: Profile;
   health: HealthState;
   meals: Meal[];
+  /** Products you own. */
+  supplements: Supplement[];
+  /** Individual takings, one row each. */
+  doses: SupplementDose[];
   settings: Settings;
 }
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const HEALTH_DAY_CAP = 400;
 
 export function todayISO(d: Date = new Date()): string {
@@ -155,6 +211,8 @@ export function freshData(): AppData {
     profile: { goal: 'gain' },
     health: { lastSync: null, src: null, days: {} },
     meals: [],
+    supplements: [],
+    doses: [],
     settings: {},
   };
 }

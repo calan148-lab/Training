@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { freshData, type AppData, type Meal } from '../domain/types';
+import {
+  freshData,
+  type AppData,
+  type Meal,
+  type Supplement,
+  type SupplementKind,
+} from '../domain/types';
 import {
   KCAL_PER_KG,
+  intakeByDay,
   surplusFor,
   energyTolerance,
   estimateMaintenance,
@@ -339,5 +346,149 @@ describe('verdict', () => {
     const v = evaluateTargets(base(), END);
     expect(v.inCount).toBe(0);
     expect(v.results.every((r) => r.status === 'nodata' || r.status === 'info' || r.status === 'low')).toBe(true);
+  });
+});
+
+
+/* ------------------------------------------------------------------ */
+/* Supplements                                                         */
+/* ------------------------------------------------------------------ */
+
+function suppl(id: string, kind: SupplementKind, extra: Partial<Supplement> = {}): Supplement {
+  return { id, name: id, kind, servingLabel: '1 serving', addedAt: iso(40), ...extra };
+}
+
+function withDoses(d: AppData, supplementId: string, days: number, hour = 8, servings = 1): AppData {
+  for (let i = days - 1; i >= 0; i--) {
+    const date = iso(i);
+    d.doses.push({
+      id: `${supplementId}-${date}`,
+      supplementId,
+      date,
+      at: `${date}T${String(hour).padStart(2, '0')}:00:00`,
+      servings,
+    });
+  }
+  return d;
+}
+
+describe('nutritive supplements reach the intake targets', () => {
+  it('counts shake protein toward the protein target', () => {
+    const d = base();
+    d.weights = [{ date: iso(0), kg: 80 }];
+    withIntake(d, 2000, 100, 7);
+    const without = proteinTarget(d, END).value!;
+
+    d.supplements = [suppl('whey', 'nutritive', { kcal: 110, protein_g: 24 })];
+    withDoses(d, 'whey', 7, 8, 2);
+
+    expect(proteinTarget(d, END).value).toBe(without + 48);
+  });
+
+  it('counts shake calories toward measured maintenance', () => {
+    const d = withWeightTrend(base(), 0.35);
+    withIntake(d, 2400, 150, 28);
+    const without = estimateMaintenance(d, END)!.kcal;
+
+    d.supplements = [suppl('whey', 'nutritive', { kcal: 110, protein_g: 24 })];
+    withDoses(d, 'whey', 28, 8, 2);
+
+    // 220 kcal a day of shake is 220 kcal a day of maintenance that was
+    // previously invisible.
+    expect(estimateMaintenance(d, END)!.kcal).toBe(without + 220);
+  });
+
+  it('does not let a shake alone make a day count as logged', () => {
+    const d = base();
+    d.weights = [{ date: iso(0), kg: 80 }];
+    d.supplements = [suppl('whey', 'nutritive', { kcal: 110, protein_g: 24 })];
+    withDoses(d, 'whey', 7);
+
+    // Seven shake-only days would otherwise read as a full week of 24 g days
+    // and report the protein target as catastrophically low.
+    expect(proteinTarget(d, END).status).toBe('nodata');
+    expect(intakeByDay(d).get(iso(0))!.hasMeal).toBe(false);
+  });
+});
+
+describe('creatine is not read as fat', () => {
+  it('refuses to derive maintenance across saturation', () => {
+    const d = withWeightTrend(base(), 0.35);
+    withIntake(d, 2400, 150, 28);
+    expect(estimateMaintenance(d, END)!.basis).toBe('empirical');
+
+    d.supplements = [suppl('mono', 'creatine')];
+    withDoses(d, 'mono', 14);
+
+    // No height/age/sex, so there is no formula fallback either — better to
+    // say nothing than to hand back a figure hundreds of kcal wrong.
+    expect(estimateMaintenance(d, END)).toBeNull();
+  });
+
+  it('falls back to the formula estimate when it can', () => {
+    const d = withWeightTrend(base(), 0.35);
+    withIntake(d, 2400, 150, 28);
+    d.profile = { ...d.profile, heightCm: 180, age: 33, sex: 'male' };
+    d.supplements = [suppl('mono', 'creatine')];
+    withDoses(d, 'mono', 14);
+
+    expect(estimateMaintenance(d, END)!.basis).toBe('formula');
+  });
+
+  it('downgrades the weight trend to context and says why', () => {
+    const d = withWeightTrend(base(), 0);
+    d.profile = { ...d.profile, goal: 'cut' };
+    d.supplements = [suppl('mono', 'creatine')];
+    withDoses(d, 'mono', 14);
+
+    const r = weightTrendTarget(d, END);
+    expect(r.status).toBe('info');
+    expect(r.note).toMatch(/creatine/i);
+  });
+
+  it('judges the trend normally once saturation is long past', () => {
+    const d = withWeightTrend(base(), 0);
+    d.supplements = [suppl('mono', 'creatine')];
+    d.doses = [
+      { id: 'old', supplementId: 'mono', date: iso(120), at: `${iso(120)}T08:00:00`, servings: 1 },
+    ];
+
+    expect(weightTrendTarget(d, END).status).toBe('low');
+  });
+});
+
+describe('stimulants are named rather than blamed on training', () => {
+  it('notes stimulant doses when recovery looks suppressed', () => {
+    const d = base();
+    for (let i = 27; i >= 0; i--) {
+      // Resting heart rate jumps in the trailing week.
+      d.health.days[iso(i)] = { rhr: i < 7 ? 62 : 52 };
+    }
+    d.supplements = [suppl('shred', 'stimulant', { caffeine_mg: 200 })];
+    withDoses(d, 'shred', 5);
+
+    const r = recoveryTarget(d, END);
+    expect(r.status).toBe('high');
+    expect(r.note).toMatch(/stimulant dose/i);
+  });
+
+  it('points at the late dose when sleep is short', () => {
+    const d = base();
+    for (let i = 6; i >= 0; i--) d.health.days[iso(i)] = { sleep: 5.5 };
+    d.supplements = [suppl('shred', 'stimulant', { caffeine_mg: 200 })];
+    withDoses(d, 'shred', 4, 18);
+
+    const r = sleepTarget(d, END);
+    expect(r.status).toBe('low');
+    expect(r.note).toMatch(/after 16:00/);
+  });
+
+  it('says nothing about caffeine when sleep is fine', () => {
+    const d = base();
+    for (let i = 6; i >= 0; i--) d.health.days[iso(i)] = { sleep: 8 };
+    d.supplements = [suppl('shred', 'stimulant', { caffeine_mg: 200 })];
+    withDoses(d, 'shred', 4, 18);
+
+    expect(sleepTarget(d, END).note).not.toMatch(/16:00/);
   });
 });

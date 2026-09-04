@@ -255,3 +255,50 @@ describe('CORS and routing', () => {
     expect((await worker.fetch(new Request('https://w.dev/other'), env)).status).toBe(404);
   });
 });
+
+describe('supplement route', () => {
+  function postTo(path: string, body: unknown = goodBody): Request {
+    return new Request(`https://w.dev${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.APP_TOKEN}` },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('sends the supplement schema and prompt, not the meal ones', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', async (_u: string, i: RequestInit) => {
+      sent = JSON.parse(i.body as string);
+      return upstreamOk({});
+    });
+
+    await worker.fetch(postTo('/supplement'), env);
+
+    const system = sent.system as string;
+    expect(system).toMatch(/supplement label/i);
+    const schema = (sent.output_config as { format: { schema: { properties: object } } }).format.schema;
+    expect(Object.keys(schema.properties)).toContain('creatine_g');
+    expect(Object.keys(schema.properties)).not.toContain('items');
+  });
+
+  it('still requires a token', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const req = new Request('https://w.dev/supplement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(goodBody),
+    });
+    expect((await worker.fetch(req, env)).status).toBe(401);
+  });
+
+  it('still rejects an oversized image', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const huge = { image: 'A'.repeat(12_000_000), mediaType: 'image/jpeg' };
+    expect((await worker.fetch(postTo('/supplement', huge), env)).status).toBe(413);
+  });
+
+  it('404s an unknown path', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    expect((await worker.fetch(postTo('/vitamins'), env)).status).toBe(404);
+  });
+});

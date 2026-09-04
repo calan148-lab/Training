@@ -57,6 +57,8 @@ export function migrate(raw: unknown): AppData {
       days: o.health?.days ?? {},
     },
     meals: Array.isArray(o.meals) ? o.meals : [],
+    supplements: Array.isArray(o.supplements) ? o.supplements : [],
+    doses: Array.isArray(o.doses) ? o.doses : [],
     settings: { ...base.settings, ...(o.settings ?? {}) },
   };
   return trimHealth(d);

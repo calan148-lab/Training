@@ -1,4 +1,4 @@
-import { MEAL_SCHEMA, SYSTEM_PROMPT } from './schema';
+import { MEAL_SCHEMA, SUPPLEMENT_PROMPT, SUPPLEMENT_SCHEMA, SYSTEM_PROMPT } from './schema';
 
 export interface Env {
   /** Anthropic API key. Set with `wrangler secret put ANTHROPIC_API_KEY` — never in wrangler.toml. */
@@ -49,6 +49,20 @@ function tokensMatch(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/**
+ * One upstream call, two jobs. Auth, rate limiting, size checks and error
+ * classification are identical whichever panel is in the photo, so only the
+ * schema, the system prompt and the ask differ per route.
+ */
+const ROUTES: Record<string, { schema: unknown; system: string; ask: string }> = {
+  '/meal': { schema: MEAL_SCHEMA, system: SYSTEM_PROMPT, ask: 'Estimate this meal.' },
+  '/supplement': {
+    schema: SUPPLEMENT_SCHEMA,
+    system: SUPPLEMENT_PROMPT,
+    ask: 'Read this supplement label.',
+  },
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') {
@@ -58,7 +72,8 @@ export default {
     if (url.pathname === '/health') {
       return json({ ok: true, model: DEFAULT_MODEL }, 200, env);
     }
-    if (request.method !== 'POST' || url.pathname !== '/meal') {
+    const route = request.method === 'POST' ? ROUTES[url.pathname] : undefined;
+    if (!route) {
       return json({ error: 'Not found' }, 404, env);
     }
 
@@ -97,21 +112,19 @@ export default {
     }
 
     const hint = typeof body.hint === 'string' ? body.hint.slice(0, 500) : '';
-    const userText = hint
-      ? `Estimate this meal. Context from the person who ate it: ${hint}`
-      : 'Estimate this meal.';
+    const userText = hint ? `${route.ask} Context from the owner: ${hint}` : route.ask;
 
     const payload = {
       model: body.model || DEFAULT_MODEL,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: route.system,
       // Low effort: identifying food and judging a portion against a visual
       // reference is a bounded perception task, not deep reasoning. Thinking
       // tokens bill as output, so leaving this at the default would multiply
       // the per-photo cost for no gain in accuracy.
       output_config: {
         effort: 'low',
-        format: { type: 'json_schema', schema: MEAL_SCHEMA },
+        format: { type: 'json_schema', schema: route.schema },
       },
       messages: [
         {
