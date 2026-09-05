@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import './styles.css';
 import { weekNo } from './domain/progress';
+import { isSyncPending, readHandoff } from './health/handoff';
 import { useAppData } from './useAppData';
 import { Health } from './views/Health';
 import { Ladders } from './views/Ladders';
@@ -22,7 +23,17 @@ type Tab = (typeof TABS)[number]['id'];
 
 export function App() {
   const store = useAppData();
-  const [tab, setTab] = useState<Tab>('today');
+  /**
+   * Coming back from a Health sync opens on Target rather than Today.
+   *
+   * iOS returns from Shortcuts as a fresh page load, so a tap that started on
+   * the Target tab would otherwise land you on Today with a toast about days
+   * you can no longer see. The Health view does the importing; this only puts
+   * you in front of it.
+   */
+  const [tab, setTab] = useState<Tab>(() =>
+    readHandoff(window.location.href) || isSyncPending() ? 'health' : 'today',
+  );
 
   if (!store.data) return <div className="wrap boot">Loading…</div>;
   const d = store.data;
