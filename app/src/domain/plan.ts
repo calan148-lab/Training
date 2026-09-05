@@ -49,7 +49,7 @@ export interface Exercise {
   rest: number;
 }
 
-export const SESSIONS: Record<'A' | 'B', { title: string; ex: Exercise[] }> = {
+export const SESSIONS: Record<Exclude<SessionType, 'C'>, { title: string; ex: Exercise[] }> = {
   A: {
     title: 'Push emphasis',
     ex: [
@@ -72,6 +72,15 @@ export const SESSIONS: Record<'A' | 'B', { title: string; ex: Exercise[] }> = {
       { k: 'hollow', n: 'Hollow body hold', v: 'Seconds held', t: '3 × 20-40s', sets: 3, top: 40, rest: 30 },
     ],
   },
+  D: {
+    title: 'Core and abs',
+    ex: [
+      { k: 'core', t: '4 × 8-15', sets: 4, top: 15, rest: 60 },
+      { k: 'floor', t: '3 × 8-15', sets: 3, top: 15, rest: 45 },
+      { k: 'pallof', n: 'Pallof press', v: '10 kg band · anchor at chest height, press straight out, resist the twist', t: '3 × 10-12 each side', sets: 3, top: 12, rest: 45 },
+      { k: 'sideplank', n: 'Side plank', v: 'Seconds held, each side', t: '3 × 20-45s', sets: 3, top: 45, rest: 30 },
+    ],
+  },
 };
 
 export const RANKS = [
@@ -84,10 +93,17 @@ export const RANKS = [
   { xp: 13000, n: 'Ironclad' },
 ] as const;
 
-/** The 8-week schedule — A and B alternate week to week. Monday-first. */
+/**
+ * The 8-week schedule — A and B alternate week to week. Monday-first.
+ *
+ * Wednesday holds the core day rather than the second full session it looks
+ * like it could take: it lands 48 hours after Monday's trunk work, and putting
+ * a heavy session there would leave no clear rest before Thursday. Sunday
+ * stays genuinely empty.
+ */
 export const PLAN: SessionType[][] = [
-  ['A', 'C', '', 'B', 'C', 'A', ''] as SessionType[],
-  ['B', 'C', '', 'A', 'C', 'B', ''] as SessionType[],
+  ['A', 'C', 'D', 'B', 'C', 'A', ''] as SessionType[],
+  ['B', 'C', 'D', 'A', 'C', 'B', ''] as SessionType[],
 ];
 
-export const SNAME: Record<SessionType, string> = { A: 'Push', B: 'Pull', C: 'Circuit' };
+export const SNAME: Record<SessionType, string> = { A: 'Push', B: 'Pull', C: 'Circuit', D: 'Core' };

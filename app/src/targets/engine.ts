@@ -1,4 +1,4 @@
-import { allWeights } from '../domain/progress';
+import { allWeights, isFullSession } from '../domain/progress';
 import {
   creatineConfounds,
   dosesOfKind,
@@ -492,15 +492,24 @@ export function frequencyTarget(data: AppData, end: string): TargetResult {
   const name = 'Training frequency';
   const band = '≥ 4 sessions/week';
   const from = shiftDate(end, -6);
-  const logged = data.sessions.filter((s) => s.date >= from && s.date <= end).length;
+  const week = data.sessions.filter((s) => s.date >= from && s.date <= end);
+  // Core days are logged and rewarded, but they are not one of the four —
+  // otherwise three sessions plus an ab session reads as a full week.
+  const logged = week.filter(isFullSession).length;
+  const coreDays = week.length - logged;
   const healthWorkouts = windowOf(healthSeries(data, 'wo'), 7, end).reduce((a, p) => a + p.v, 0);
 
   let note =
     logged >= 4
       ? `${logged} sessions in the last 7 days. On plan.`
       : `${logged} of 4 sessions this week. The plan only works if the sessions happen.`;
+  if (coreDays) {
+    note += ` Plus ${coreDays} core ${coreDays === 1 ? 'day' : 'days'}, which don't count toward the four.`;
+  }
   // Cross-check: Health knowing about workouts you never logged is worth saying.
-  if (healthWorkouts > logged) {
+  // Compared against everything logged, core days included — a core day is a
+  // workout as far as the watch is concerned.
+  if (healthWorkouts > week.length) {
     note += ` Apple Health recorded ${healthWorkouts} workouts — you may have sessions left unlogged.`;
   }
   return {

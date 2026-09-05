@@ -10,6 +10,9 @@ import { StatusStrip } from '../components/StatusStrip';
 
 const DL = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
+/** Calendar swatch per session type. */
+const SQ_CLASS: Record<SessionType, string> = { A: 's', B: 's', C: 'c', D: 'd' };
+
 function Calendar({ d, onPick }: { d: AppData; onPick: (t: SessionType) => void }) {
   const now = new Date();
   const today = todayISO(now);
@@ -59,7 +62,7 @@ function Calendar({ d, onPick }: { d: AppData; onPick: (t: SessionType) => void 
             }}
           >
             <span className="dl">{c.label}</span>
-            <span className={`sq ${c.plan ? (c.plan === 'C' ? 'c' : 's') : 'off'}`}>{c.plan || '·'}</span>
+            <span className={`sq ${c.plan ? SQ_CLASS[c.plan] : 'off'}`}>{c.plan || '·'}</span>
             <span className="dn">{c.n}</span>
           </div>
         ))}
@@ -182,7 +185,7 @@ export function Today({ store }: { store: Store }) {
       <StatusStrip verdict={verdict} />
 
       <div className="picker">
-        {(['A', 'B', 'C'] as SessionType[]).map((t) => (
+        {(['A', 'B', 'C', 'D'] as SessionType[]).map((t) => (
           <button key={t} aria-pressed={cur === t} onClick={() => setCur(t)}>
             <span className="let">{t}</span>
             <span className="nm">{SNAME[t]}</span>
@@ -211,7 +214,9 @@ export function Today({ store }: { store: Store }) {
         </div>
       ) : (
         SESSIONS[cur].ex.map((e, i) => {
-          const key = (e.k === 'core' ? coreMode : e.k) as LadderKey;
+          // The swap is Session A's: D trains hanging and floor core as separate
+          // exercises, so honouring coreMode there would render floor twice.
+          const key = (cur === 'A' && e.k === 'core' ? coreMode : e.k) as LadderKey;
           const ladder = LADDERS[key];
           const name = e.n ?? ladder?.name ?? e.k;
           const varia = e.v ?? ladder?.steps[d.ladders[key] ?? 0] ?? '';

@@ -95,11 +95,25 @@ const V1 = {
   seen: ['first'],
 };
 
+const EXPORT_DAYS = 28;
+
+/**
+ * Nth day of the synthetic export, anchored so the window ends today.
+ *
+ * It used to be pinned to a fixed calendar date. Every target judges a
+ * trailing window against the wall clock, so a fixed fixture stops covering
+ * those windows the moment the real date walks past it — which is exactly
+ * what happened, and the sleep check started reading "No data" on a build
+ * nobody had touched.
+ */
+const exportDay = (n) =>
+  new Date(Date.now() - (EXPORT_DAYS - 1 - n) * 864e5).toISOString().slice(0, 10);
+
 /** A synthetic export.xml with values we can verify by hand. */
 function buildExportXml() {
   const rows = [];
-  const day = (n) => new Date(Date.UTC(2026, 7, 4) + n * 864e5).toISOString().slice(0, 10);
-  for (let i = 0; i < 28; i++) {
+  const day = exportDay;
+  for (let i = 0; i < EXPORT_DAYS; i++) {
     const d = day(i);
     // Weight climbing 0.4 kg over 28 days ~ +0.43 kg/month: inside the band.
     const wt = (71.2 + i * (0.4 / 27)).toFixed(2);
@@ -209,9 +223,9 @@ try {
     30000,
   );
   const days = afterImport.health.days;
-  check('28 days imported', Object.keys(days).length === 28, `got ${Object.keys(days).length}`);
+  check('28 days imported', Object.keys(days).length === EXPORT_DAYS, `got ${Object.keys(days).length}`);
 
-  const sample = days['2026-08-10'];
+  const sample = days[exportDay(6)];
   check('steps summed across the day', sample?.steps === 8412, `got ${sample?.steps}`);
   check('active energy captured', sample?.aen === 540, `got ${sample?.aen}`);
   check('resting HR averaged', sample?.rhr === 51, `got ${sample?.rhr}`);
@@ -254,11 +268,15 @@ try {
   console.log('\n4. Shortcut import via the Files route');
   // The primary path: a file the Shortcut wrote to iCloud Drive, carrying a
   // trailing window rather than a single day.
+  // One day the export already covers and one it doesn't, so the toast has to
+  // report a refresh and a new day. Both ride the same anchor as the export.
+  const seenDay = exportDay(EXPORT_DAYS - 1);
+  const newDay = exportDay(-1);
   const rolling = JSON.stringify({
     t: 'health8w', v: 1,
     days: [
-      { d: '2026-08-31', wt: 71.8, steps: 8500 },
-      { d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+      { d: seenDay, wt: 71.8, steps: 8500 },
+      { d: newDay, wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
     ],
   });
   await page.locator('input[accept*="json"]').setInputFiles({
@@ -284,8 +302,8 @@ try {
   const both = await waitForState(page, (x) => !!x.health.days['2026-07-10'] && !!x.health.days['2026-07-11'], 'multi-file merge');
   check('both files landed with their values', both.health.days['2026-07-10'].steps === 7000 && both.health.days['2026-07-11'].steps === 7100);
 
-  const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
-    .health.days['2026-09-01'];
+  const merged = (await waitForState(page, (d) => !!d.health.days[newDay], 'shortcut merge'))
+    .health.days[newDay];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
   console.log('\n5. Paste still works, and a stale Shortcut is rejected loudly');

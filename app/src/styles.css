@@ -10,6 +10,7 @@
   --good:#5FB78F;
   --bad:#C9635B;
   --warn:#D4A03C;
+  --cool:#8FAFD0;
   --display:'Archivo','Helvetica Neue',Impact,sans-serif;
   --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
@@ -62,9 +63,11 @@ h2:first-child{margin-top:0}
 }
 .sq.s{background:var(--brass-dim);color:var(--brass);border:1px solid var(--brass-dim)}
 .sq.c{background:#22392F;color:var(--good);border:1px solid #2E4B3E}
+.sq.d{background:#232C3A;color:var(--cool);border:1px solid #2E3B4D}
 .sq.off{background:transparent;color:var(--steel);border:1px dashed var(--steel);font-size:12px}
 .day.done .sq.s{background:var(--brass);color:#15181C;border-color:var(--brass)}
 .day.done .sq.c{background:var(--good);color:#15181C;border-color:var(--good)}
+.day.done .sq.d{background:var(--cool);color:#15181C;border-color:var(--cool)}
 .day.done .dn{color:var(--dust)}
 .day.today{border-color:var(--chalk);background:var(--raise)}
 .day.today .dl{color:var(--chalk);font-weight:600}
@@ -101,7 +104,7 @@ h2:first-child{margin-top:0}
 .badge.got b{color:var(--brass)}
 .badge span{font-size:11px;color:var(--dust);line-height:1.35;display:block;margin-top:3px}
 
-.picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:20px}
 .picker button{
   background:var(--slate);border:1px solid var(--steel);color:var(--chalk);
   border-radius:10px;padding:13px 6px;cursor:pointer;font-family:var(--body);
