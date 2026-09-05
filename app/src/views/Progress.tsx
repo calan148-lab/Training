@@ -115,7 +115,7 @@ export function Progress({ store }: { store: Store }) {
             .map((s, i) => (
               <li key={`${s.date}-${i}`}>
                 <span>{s.date}</span>
-                <b>{s.type === 'C' ? `${s.rounds} rounds` : `Session ${s.type}`}</b>
+                <b>{s.type === 'C' ? `${s.rounds} rounds` : s.type === 'D' ? 'Core' : `Session ${s.type}`}</b>
               </li>
             ))
         ) : (

@@ -1,5 +1,5 @@
 import { LADDERS, PLAN, RANKS } from './plan';
-import type { AppData, LadderKey, SessionType, WeightEntry } from './types';
+import type { AppData, LadderKey, SessionRecord, SessionType, WeightEntry } from './types';
 
 const WEEK_MS = 6.048e8;
 
@@ -34,20 +34,41 @@ export function rungsClimbed(d: AppData): number {
   return Object.values(d.ladders).reduce((a, b) => a + b, 0);
 }
 
-/** Sessions per block-week, keyed by 0-based week index. */
-export function weekBuckets(d: AppData): Record<number, number> {
+/**
+ * A full training session, as opposed to a core day.
+ *
+ * The four-a-week target is about spreading real stimulus across the week. A
+ * 20-minute core session is worth doing and worth logging, but three sessions
+ * plus a core day is three sessions — counting it as the fourth would let the
+ * target report "on plan" for a week that wasn't.
+ */
+export function isFullSession(s: SessionRecord): boolean {
+  return s.type !== 'D';
+}
+
+/**
+ * Sessions per block-week, keyed by 0-based week index. Pass a predicate to
+ * count only some of them — `isFullSession` for anything judging the plan.
+ */
+export function weekBuckets(
+  d: AppData,
+  include: (s: SessionRecord) => boolean = () => true,
+): Record<number, number> {
   const b: Record<number, number> = {};
   for (const s of d.sessions) {
+    if (!include(s)) continue;
     const w = weeksSince(d.start, s.date);
     b[w] = (b[w] ?? 0) + 1;
   }
   return b;
 }
 
+/** Best week by full sessions — what the '4 sessions in one week' badge means. */
 export function maxWeekCount(d: AppData): number {
-  return Math.max(0, ...Object.values(weekBuckets(d)));
+  return Math.max(0, ...Object.values(weekBuckets(d, isFullSession)));
 }
 
+/** Everything logged this week, core days included — a plain counter, not a judgement. */
 export function thisWeekCount(d: AppData): number {
   return weekBuckets(d)[weekNo(d) - 1] ?? 0;
 }
@@ -78,13 +99,15 @@ export function allWeights(d: AppData): WeightEntry[] {
  */
 export function calcXP(d: AppData): number {
   let xp = 0;
-  for (const s of d.sessions) xp += s.type === 'C' ? 80 : 100;
+  // A core day is a fraction of the work of a full session and is paid as one,
+  // so that adding core days can't out-earn actually training.
+  for (const s of d.sessions) xp += s.type === 'C' ? 80 : s.type === 'D' ? 50 : 100;
   xp += rungsClimbed(d) * 250;
 
   const weighWeeks = new Set(allWeights(d).map((w) => weeksSince(d.start, w.date)));
   xp += weighWeeks.size * 25;
 
-  for (const c of Object.values(weekBuckets(d))) if (c >= 4) xp += 200;
+  for (const c of Object.values(weekBuckets(d, isFullSession))) if (c >= 4) xp += 200;
   const bp = bestPull(d);
   if (bp) xp += bp * 15;
   return xp;

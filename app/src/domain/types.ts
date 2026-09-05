@@ -1,5 +1,13 @@
-/** Session type: A = push emphasis, B = pull emphasis, C = 20-minute circuit. */
-export type SessionType = 'A' | 'B' | 'C';
+/**
+ * Session type: A = push emphasis, B = pull emphasis, C = 20-minute circuit,
+ * D = core and abs only.
+ *
+ * D is deliberately cheap. The trunk recovers in a day or two and the session
+ * costs almost nothing systemically, which is what lets it sit on a rest day
+ * or ride along as a second session. It is scored accordingly — see
+ * `isFullSession` in domain/progress.
+ */
+export type SessionType = 'A' | 'B' | 'C' | 'D';
 
 export type LadderKey = 'pullup' | 'pushup' | 'pike' | 'squat' | 'core' | 'floor';
 

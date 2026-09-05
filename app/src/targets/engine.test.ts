@@ -279,6 +279,26 @@ describe('frequency target', () => {
     expect(frequencyTarget(d, END).status).toBe('in');
   });
 
+  it('does not let core days stand in for the four', () => {
+    const d = base();
+    for (let i = 0; i < 3; i++) d.sessions.push({ date: iso(i), type: 'A' });
+    d.sessions.push({ date: iso(3), type: 'D' });
+    const r = frequencyTarget(d, END);
+    expect(r.status).toBe('low');
+    expect(r.value).toBe(3);
+    expect(r.note).toMatch(/1 core day, which don't count/);
+  });
+
+  it('counts core days toward what Health should have seen', () => {
+    const d = base();
+    for (let i = 0; i < 4; i++) d.sessions.push({ date: iso(i), type: 'A' });
+    d.sessions.push({ date: iso(4), type: 'D' });
+    d.health.days[iso(0)] = { wo: 3 };
+    d.health.days[iso(1)] = { wo: 2 };
+    // Five logged against five seen — nothing is missing.
+    expect(frequencyTarget(d, END).note).not.toMatch(/left unlogged/);
+  });
+
   it('notices workouts Health saw that you never logged', () => {
     const d = base();
     d.sessions.push({ date: iso(1), type: 'A' });
