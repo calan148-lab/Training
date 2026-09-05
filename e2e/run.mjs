@@ -95,10 +95,25 @@ const V1 = {
   seen: ['first'],
 };
 
+/**
+ * The fixture window, anchored to today rather than to a fixed date.
+ *
+ * Sleep, recovery and training frequency are judged on a window trailing *now*,
+ * so a fixture pinned to a calendar date stops having any data in that window
+ * the moment the clock moves past it — and the assertions about them start
+ * failing on a run that changed nothing. This is what took the suite red in
+ * September against an August fixture.
+ */
+const DAY0 = (() => {
+  const t = new Date();
+  return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - 27 * 864e5;
+})();
+/** day(0) is 27 days ago; day(27) is today. */
+const day = (n) => new Date(DAY0 + n * 864e5).toISOString().slice(0, 10);
+
 /** A synthetic export.xml with values we can verify by hand. */
 function buildExportXml() {
   const rows = [];
-  const day = (n) => new Date(Date.UTC(2026, 7, 4) + n * 864e5).toISOString().slice(0, 10);
   for (let i = 0; i < 28; i++) {
     const d = day(i);
     // Weight climbing 0.4 kg over 28 days ~ +0.43 kg/month: inside the band.
@@ -211,7 +226,7 @@ try {
   const days = afterImport.health.days;
   check('28 days imported', Object.keys(days).length === 28, `got ${Object.keys(days).length}`);
 
-  const sample = days['2026-08-10'];
+  const sample = days[day(6)];
   check('steps summed across the day', sample?.steps === 8412, `got ${sample?.steps}`);
   check('active energy captured', sample?.aen === 540, `got ${sample?.aen}`);
   check('resting HR averaged', sample?.rhr === 51, `got ${sample?.rhr}`);
@@ -257,8 +272,10 @@ try {
   const rolling = JSON.stringify({
     t: 'health8w', v: 1,
     days: [
-      { d: '2026-08-31', wt: 71.8, steps: 8500 },
-      { d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+      // One day the export already carried and one it did not, which is what
+      // "1 new day, 1 refreshed" is testing.
+      { d: day(27), wt: 71.8, steps: 8500 },
+      { d: day(28), wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
     ],
   });
   await page.locator('input[accept*="json"]').setInputFiles({
@@ -276,16 +293,16 @@ try {
 
   console.log('\n4c. Several files at once, for when you have been away');
   await page.locator('input[accept*="json"]').setInputFiles([
-    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from('[{"d":"2026-07-10","steps":7000}]') },
-    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from('{"d":"2026-07-11","steps":7100}') },
+    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from(`[{"d":"${day(-30)}","steps":7000}]`) },
+    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(`{"d":"${day(-29)}","steps":7100}`) },
   ]);
   check('multi-file, bare array and single object both accepted',
     await waitForToast(page, '2 new days').catch(() => false));
-  const both = await waitForState(page, (x) => !!x.health.days['2026-07-10'] && !!x.health.days['2026-07-11'], 'multi-file merge');
-  check('both files landed with their values', both.health.days['2026-07-10'].steps === 7000 && both.health.days['2026-07-11'].steps === 7100);
+  const both = await waitForState(page, (x) => !!x.health.days[day(-30)] && !!x.health.days[day(-29)], 'multi-file merge');
+  check('both files landed with their values', both.health.days[day(-30)].steps === 7000 && both.health.days[day(-29)].steps === 7100);
 
-  const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
-    .health.days['2026-09-01'];
+  const merged = (await waitForState(page, (d) => !!d.health.days[day(28)], 'shortcut merge'))
+    .health.days[day(28)];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
   console.log('\n5. Paste still works, and a stale Shortcut is rejected loudly');
