@@ -6,6 +6,7 @@ dist/
 .dev.vars
 .wrangler/
 coverage/
+*.tsbuildinfo
 test-results/
 playwright-report/
 e2e/shots/
