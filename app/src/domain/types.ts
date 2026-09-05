@@ -165,6 +165,8 @@ export interface Profile {
 export interface Settings {
   /** Base URL of the vision Worker, e.g. https://meals.example.workers.dev */
   workerUrl?: string;
+  /** Name of the iOS Shortcut the sync button runs. Defaults to DEFAULT_SHORTCUT_NAME. */
+  shortcutName?: string;
   /** Bearer token checked by the Worker. Never committed; entered once. */
   workerToken?: string;
   /** Model the Worker should use. */

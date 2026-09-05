@@ -9,7 +9,8 @@ export once to seed history.
 
 ## Route 1 — the Shortcut (daily)
 
-You build this once. After that it runs on a schedule and you pick one file.
+You build this once. After that it runs on a schedule, and getting the numbers into
+the app is a single tap — **Target → Sync now** — or one file to pick.
 
 **Nothing leaves your phone.** The Shortcut writes a file to your own iCloud Drive;
 the app reads it locally. There is no server and no account anywhere in this path.
@@ -100,16 +101,70 @@ In the Shortcuts app, new shortcut, then:
 Overwriting one fixed file is deliberate: you always pick the same file, and because
 it carries a rolling week you never need to hunt for older ones.
 
-Then open the app → **Target** → **Import from Files** → pick `health.json`.
+Then open the app → **Target** → **Sync now**, or **Import from Files** → pick
+`health.json`.
 
 Exact action names shift between iOS releases; if one of the above isn't where this
 says, it will be within one menu of it.
+
+### The Sync now button
+
+**Target** → **Sync now** runs this same Shortcut for you. That's the whole daily
+ritual in one tap, with no trip through the Files picker.
+
+Two things have to line up:
+
+1. **The name has to match.** The app asks for a Shortcut called
+   `8 Weeks Health Sync`. If yours is called something else, put its name under
+   *Target → Shortcut name*; capitals and spaces count.
+2. **The JSON has to be the Shortcut's last action**, because what it ends up
+   holding is what gets handed back.
+
+What happens next depends on how you opened the app.
+
+**From Safari.** Shortcuts opens, runs, and iOS returns you to the page carrying
+the week it just read. It imports itself and you land on the Target tab looking
+at the answer — no file to pick.
+
+**From the home screen.** The button runs the Shortcut and iOS brings you back,
+but the data comes in through the file rather than the return trip: tap **Import
+from Files** and pick `health.json`. The app prompts you when you get back.
+
+That asymmetry is iOS, not laziness. An `https` callback always opens in Safari,
+never in an installed web app — and Safari keeps its own separate copy of this
+app's storage, so a payload returned that way would land in a copy of the app you
+never look at. The installed app therefore asks for no callback at all and
+finishes from the file, which the Shortcut has just rewritten.
+
+**Nothing leaves the phone on this route either.** The payload travels in a URL
+handed from one app to another on the device. There is still no server.
+
+**If the button does nothing**, you're in a browser with no Shortcuts app behind
+it — a desktop, usually. The app says so after a second or two rather than
+leaving you wondering.
+
+**If you come back empty-handed**, the Shortcut ran but iOS didn't pass its
+output on; not every release does. The app says so and points you at the file.
+To force the round trip, add one action to the end of the Shortcut — **Open
+URL**, set to:
+
+```
+https://your-app-address/#health=[the JSON]
+```
+
+The app reads `#health=` exactly as it reads a callback, whether the JSON is
+URL-encoded or base64.
 
 ### Making it run on its own
 
 Shortcuts → **Automation** → new personal automation → **Time of Day**, early morning,
 run your shortcut, and turn **Ask Before Running** off. The file is then always current
 when you open the app.
+
+The automation and the **Sync now** button run the same Shortcut, so setting one up
+doesn't change the other. Keep both: the automation means the file is already fresh
+most mornings, and the button is there for the days you want the last hour's numbers
+rather than last night's.
 
 ### If you've been away
 
