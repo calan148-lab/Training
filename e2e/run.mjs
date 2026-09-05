@@ -82,6 +82,16 @@ function check(name, cond, detail = '') {
   else { failures.push(`${name}${detail ? ` — ${detail}` : ''}`); console.log(`  FAIL ${name} ${detail}`); }
 }
 
+/**
+ * Fixture dates, relative to the day the suite runs.
+ *
+ * Every target judges on a window ending today, so a fixture pinned to fixed
+ * calendar dates slides out of those windows as real time passes and the suite
+ * starts failing for no reason but the date. Anchoring to `now` keeps what each
+ * assertion is actually testing true on any day it runs.
+ */
+const dayISO = (offset) => new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10);
+
 /** The v1 payload a real phone would be carrying. */
 const V1 = {
   start: '2026-08-04',
@@ -98,7 +108,9 @@ const V1 = {
 /** A synthetic export.xml with values we can verify by hand. */
 function buildExportXml() {
   const rows = [];
-  const day = (n) => new Date(Date.UTC(2026, 7, 4) + n * 864e5).toISOString().slice(0, 10);
+  // Day 27 is today, so the last night of sleep lands inside the 7-day window
+  // the sleep target judges on — the whole point of the trailing fixture.
+  const day = (n) => dayISO(n - 27);
   for (let i = 0; i < 28; i++) {
     const d = day(i);
     // Weight climbing 0.4 kg over 28 days ~ +0.43 kg/month: inside the band.
@@ -257,8 +269,8 @@ try {
   const rolling = JSON.stringify({
     t: 'health8w', v: 1,
     days: [
-      { d: '2026-08-31', wt: 71.8, steps: 8500 },
-      { d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+      { d: dayISO(-28), wt: 71.8, steps: 8500 },
+      { d: dayISO(-1), wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
     ],
   });
   await page.locator('input[accept*="json"]').setInputFiles({
@@ -276,22 +288,22 @@ try {
 
   console.log('\n4c. Several files at once, for when you have been away');
   await page.locator('input[accept*="json"]').setInputFiles([
-    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from('[{"d":"2026-07-10","steps":7000}]') },
-    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from('{"d":"2026-07-11","steps":7100}') },
+    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from(`[{"d":"${dayISO(-60)}","steps":7000}]`) },
+    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(`{"d":"${dayISO(-59)}","steps":7100}`) },
   ]);
   check('multi-file, bare array and single object both accepted',
     await waitForToast(page, '2 new days').catch(() => false));
-  const both = await waitForState(page, (x) => !!x.health.days['2026-07-10'] && !!x.health.days['2026-07-11'], 'multi-file merge');
-  check('both files landed with their values', both.health.days['2026-07-10'].steps === 7000 && both.health.days['2026-07-11'].steps === 7100);
+  const both = await waitForState(page, (x) => !!x.health.days[dayISO(-60)] && !!x.health.days[dayISO(-59)], 'multi-file merge');
+  check('both files landed with their values', both.health.days[dayISO(-60)].steps === 7000 && both.health.days[dayISO(-59)].steps === 7100);
 
-  const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
-    .health.days['2026-09-01'];
+  const merged = (await waitForState(page, (d) => !!d.health.days[dayISO(-1)], 'shortcut merge'))
+    .health.days[dayISO(-1)];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
   console.log('\n4d. One-tap sync: the Shortcut hands its week straight back on the URL');
   // This is what iOS does when the Shortcut finishes: it reopens the app on a
   // URL carrying the payload. No file picker is involved on this path.
-  const handoff = JSON.stringify({ t: 'health8w', v: 1, days: [{ d: '2026-09-02', wt: 72.0, steps: 9100 }] });
+  const handoff = JSON.stringify({ t: 'health8w', v: 1, days: [{ d: dayISO(-30), wt: 72.0, steps: 9100 }] });
   await page.goto(`${BASE}/#health=${encodeURIComponent(handoff)}`, { waitUntil: 'networkidle' });
   // Changing only the hash is a same-document navigation and would not re-run
   // the app; iOS comes back from Shortcuts on a full load, so force one.
@@ -300,9 +312,9 @@ try {
   const landedOn = await page.locator('nav button[aria-current="true"]').textContent();
   check('a sync return opens on the Target tab', landedOn === 'Target', landedOn);
   check('the handed-back payload imported itself', await waitForToast(page, 'new day').catch(() => false));
-  const synced = await waitForState(page, (x) => !!x.health.days['2026-09-02'], 'handoff merge');
-  check('handed-back day merged with its values', synced.health.days['2026-09-02'].steps === 9100,
-    JSON.stringify(synced.health.days['2026-09-02']));
+  const synced = await waitForState(page, (x) => !!x.health.days[dayISO(-30)], 'handoff merge');
+  check('handed-back day merged with its values', synced.health.days[dayISO(-30)].steps === 9100,
+    JSON.stringify(synced.health.days[dayISO(-30)]));
   check('payload scrubbed from the address bar', !page.url().includes('health='), page.url());
 
   console.log('\n4d-ii. Reopening the app later does not replay that sync');
