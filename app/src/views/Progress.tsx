@@ -72,83 +72,93 @@ export function Progress({ store }: { store: Store }) {
         </div>
       </div>
 
-      <h2>Badges</h2>
-      <div className="badges">
-        {BADGES.map((b) => (
-          <div className={`badge${d.seen.includes(b.id) ? ' got' : ''}`} key={b.id}>
-            <b>{b.n}</b>
-            <span>{b.d}</span>
+      {/*
+        Contiguous panes, so the phone's single column keeps the same order:
+        badges and the circuit chart on the left, weight and the logs on the right.
+      */}
+      <div className="split">
+        <div className="pane">
+          <h2>Badges</h2>
+          <div className="badges">
+            {BADGES.map((b) => (
+              <div className={`badge${d.seen.includes(b.id) ? ' got' : ''}`} key={b.id}>
+                <b>{b.n}</b>
+                <span>{b.d}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <h2>Circuit rounds</h2>
-      <Bars values={rounds} />
+          <h2>Circuit rounds</h2>
+          <Bars values={rounds} />
+        </div>
 
-      <h2>Bodyweight</h2>
-      <div className="wrow">
-        <input
-          type="number"
-          step="0.1"
-          inputMode="decimal"
-          placeholder="71.4 kg"
-          value={kg}
-          onChange={(e) => setKg(e.target.value)}
-        />
-        <button className="act" style={{ width: 'auto', padding: '12px 20px' }} onClick={addWeight}>
-          Add
-        </button>
-      </div>
-      <Bars values={weights.map((w) => w.kg)} />
-      <p className="note">
-        {trend.status === 'nodata'
-          ? trend.note
-          : `${trend.display} over the last 28 days — target ${trend.band}. ${trend.note}`}
-      </p>
+        <div className="pane">
+          <h2>Bodyweight</h2>
+          <div className="wrow">
+            <input
+              type="number"
+              step="0.1"
+              inputMode="decimal"
+              placeholder="71.4 kg"
+              value={kg}
+              onChange={(e) => setKg(e.target.value)}
+            />
+            <button className="act" style={{ width: 'auto', padding: '12px 20px' }} onClick={addWeight}>
+              Add
+            </button>
+          </div>
+          <Bars values={weights.map((w) => w.kg)} />
+          <p className="note">
+            {trend.status === 'nodata'
+              ? trend.note
+              : `${trend.display} over the last 28 days — target ${trend.band}. ${trend.note}`}
+          </p>
 
-      <h2>Recent sessions</h2>
-      <ul className="log">
-        {d.sessions.length ? (
-          [...d.sessions]
-            .slice(-14)
-            .reverse()
-            .map((s, i) => (
-              <li key={`${s.date}-${i}`}>
-                <span>{s.date}</span>
-                <b>{s.type === 'C' ? `${s.rounds} rounds` : `Session ${s.type}`}</b>
+          <h2>Recent sessions</h2>
+          <ul className="log">
+            {d.sessions.length ? (
+              [...d.sessions]
+                .slice(-14)
+                .reverse()
+                .map((s, i) => (
+                  <li key={`${s.date}-${i}`}>
+                    <span>{s.date}</span>
+                    <b>{s.type === 'C' ? `${s.rounds} rounds` : `Session ${s.type}`}</b>
+                  </li>
+                ))
+            ) : (
+              <li>
+                <span>No sessions yet. Go do one.</span>
               </li>
-            ))
-        ) : (
-          <li>
-            <span>No sessions yet. Go do one.</span>
-          </li>
-        )}
-      </ul>
+            )}
+          </ul>
 
-      <h2>Backup</h2>
-      <div className="wrow">
-        <button className="ghost" onClick={exportBackup}>
-          Export backup
-        </button>
-        <button className="ghost" onClick={() => fileRef.current?.click()}>
-          Import backup
-        </button>
+          <h2>Backup</h2>
+          <div className="wrow">
+            <button className="ghost" onClick={exportBackup}>
+              Export backup
+            </button>
+            <button className="ghost" onClick={() => fileRef.current?.click()}>
+              Import backup
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importBackup(f);
+              e.target.value = '';
+            }}
+          />
+          <p className="note">
+            Your data lives on this device only. Clearing the browser's site data deletes it, so export a
+            backup now and then — the file drops into Files, where iCloud keeps it.
+          </p>
+        </div>
       </div>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="application/json"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) importBackup(f);
-          e.target.value = '';
-        }}
-      />
-      <p className="note">
-        Your data lives on this device only. Clearing the browser's site data deletes it, so export a
-        backup now and then — the file drops into Files, where iCloud keeps it.
-      </p>
     </section>
   );
 }

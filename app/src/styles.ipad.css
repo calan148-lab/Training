@@ -1,0 +1,560 @@
+/*
+ * iPad — the same app, given room to breathe.
+ *
+ * Everything below the first rule sits behind a tablet media query, so the
+ * phone build renders exactly what it always did. That is the point: the
+ * cramped-but-dense phone layout is right for a phone, and nothing here is
+ * allowed to leak back into it.
+ *
+ * The three structural wrappers (.split, .pane, .cardGrid) are display:contents
+ * by default. Their children behave as though the wrapper were not in the DOM
+ * at all — same order, same margin collapsing, same everything — which is why
+ * adding them to the views cost the phone layout nothing. A tablet turns them
+ * into real boxes and they become columns.
+ */
+.split,
+.pane,
+.cardGrid {
+  display: contents;
+}
+
+/* ============================================================
+   Tier 1 — any iPad, portrait included (≈744px and up).
+   The tab bar becomes a sidebar and the whole scale steps up.
+   The height guard keeps a landscape phone on the phone layout,
+   where a 430px-tall viewport has no room to give away.
+   ============================================================ */
+@media (min-width: 740px) and (min-height: 600px) {
+  :root {
+    --sidebar: 236px;
+    --gap: 16px;
+    --r: 16px;
+    --stage-x: 34px;
+    /* A hairline of light along the top of a surface reads as a raised edge;
+       the shadow underneath does the rest. Both are deliberately faint —
+       at this size, one obvious drop shadow per card would look cheap. */
+    --lift: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 46%);
+    --sink: 0 20px 44px -34px rgba(0, 0, 0, 0.95);
+  }
+
+  html {
+    background: var(--ink);
+  }
+  body {
+    /* No bottom tab bar to clear any more. */
+    padding-bottom: 0;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
+  /* ---- the shell ---- */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidebar);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--slate), var(--ink) 58%);
+    border-right: 1px solid var(--steel);
+    padding: calc(env(safe-area-inset-top) + 30px) 0 calc(env(safe-area-inset-bottom) + 20px);
+  }
+  .sidebarTop {
+    max-width: none;
+    margin: 0;
+    padding: 0 22px;
+  }
+  .sidebar header {
+    padding: 0 0 22px;
+    margin-bottom: 20px;
+  }
+  .sidebar .kicker {
+    /* Tightened just enough that "Calisthenics · Week 8 of 8" holds one line
+       in the column, which is the whole reason the tracking comes down. */
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+  .sidebar h1 {
+    font-size: 38px;
+    line-height: 0.92;
+  }
+  .sidebar .weekbar {
+    gap: 4px;
+    margin-top: 20px;
+  }
+  .sidebar .weekbar i {
+    height: 6px;
+    border-radius: 3px;
+  }
+  .sidebar .weekmeta {
+    /* Stacked, because the column is too narrow to justify two ends. */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .stage {
+    margin-left: var(--sidebar);
+    padding: calc(env(safe-area-inset-top) + 34px) var(--stage-x) 80px;
+  }
+  .wrap {
+    max-width: 700px;
+    padding: 0;
+  }
+  .boot {
+    padding: 60px 40px;
+  }
+
+  /* ---- the sidebar's tabs ---- */
+  nav {
+    position: static;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 12px;
+    background: none;
+    backdrop-filter: none;
+    border-top: 0;
+    /* Push nothing to the bottom: the tabs sit under the masthead, and the
+       empty space below them is the layout doing its job. */
+    align-content: flex-start;
+  }
+  nav button {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 12px;
+    margin: 0;
+    border: 0;
+    border-radius: 11px;
+    font-family: var(--body);
+    font-size: 14.5px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    text-align: left;
+    color: var(--dust);
+    position: relative;
+    transition: background 0.16s, color 0.16s;
+  }
+  nav button::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    background: var(--brass);
+    border-radius: 0 3px 3px 0;
+    transform: translateY(-50%);
+    transition: height 0.18s;
+  }
+  nav button[aria-current='true'] {
+    background: var(--raise);
+    color: var(--chalk);
+  }
+  nav button[aria-current='true']::before {
+    height: 20px;
+  }
+  nav button[aria-current='true'] .tabIcon {
+    color: var(--brass);
+  }
+  @media (hover: hover) {
+    nav button:hover {
+      color: var(--chalk);
+      background: rgba(255, 255, 255, 0.04);
+    }
+  }
+  .tabIcon {
+    display: block;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--dust);
+    transition: color 0.16s;
+  }
+  .tabShort {
+    display: none;
+  }
+  .tabWide {
+    display: block;
+  }
+
+  /* ---- typographic scale ----
+     Bigger, and further apart. A heading gets a short brass tick above it
+     instead of a rule: it separates the sections without drawing six lines
+     down the page. */
+  h2 {
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--dust);
+    margin: 42px 0 16px;
+  }
+  h2::before {
+    content: '';
+    display: block;
+    width: 24px;
+    height: 2px;
+    background: var(--brass);
+    opacity: 0.7;
+    margin-bottom: 13px;
+  }
+  /* In two columns every pane starts a column of its own, so whichever
+     heading opens one sits flush with the top of it. */
+  .pane > h2:first-child {
+    margin-top: 0;
+  }
+  h3.sub {
+    font-size: 11.5px;
+    letter-spacing: 0.16em;
+    margin: 28px 0 14px;
+  }
+  .note {
+    font-size: 13.5px;
+    line-height: 1.65;
+    max-width: 62ch;
+  }
+
+  /* ---- surfaces ----
+     One radius, one padding step, one shared edge treatment, so the page
+     reads as a set of panels rather than a stack of unrelated boxes. */
+  .cal,
+  .rank,
+  .ex,
+  .ladder,
+  .stat,
+  .chart,
+  .strip,
+  .verdict,
+  .target,
+  .badge,
+  .circuit,
+  .supps,
+  .confirm,
+  .warnbox,
+  .assume,
+  .empty {
+    border-radius: var(--r);
+  }
+  .cal,
+  .ex,
+  .ladder,
+  .stat,
+  .circuit,
+  .target,
+  .strip,
+  .verdict,
+  .confirm,
+  .supps {
+    background-image: var(--lift);
+    box-shadow: var(--sink);
+  }
+  .rank {
+    box-shadow: var(--sink);
+  }
+
+  .cal {
+    padding: 18px 16px 16px;
+    margin-bottom: var(--gap);
+  }
+  .day {
+    padding: 11px 0 10px;
+    border-radius: 12px;
+  }
+  .sq {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+  }
+  .rank {
+    padding: 20px;
+    margin-bottom: var(--gap);
+  }
+  .rankName {
+    font-size: 27px;
+  }
+  .ring {
+    width: 66px;
+    height: 66px;
+  }
+  .ring span {
+    width: 53px;
+    height: 53px;
+    font-size: 21px;
+  }
+  .strip,
+  .verdict {
+    padding: 18px 20px;
+    margin-bottom: var(--gap);
+  }
+  .verdict b {
+    font-size: 25px;
+  }
+
+  .picker {
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .picker button {
+    padding: 17px 8px;
+    border-radius: 13px;
+    gap: 5px;
+  }
+  .picker button .let {
+    font-size: 25px;
+  }
+
+  .ex {
+    padding: 18px;
+    margin-bottom: 12px;
+  }
+  .ex-name {
+    font-size: 16px;
+  }
+  .sets {
+    gap: 10px;
+  }
+  .sets input {
+    /* Spread the set boxes across the card rather than leaving two thirds of
+       it empty — and a bigger box is an easier target mid-set. */
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: 130px;
+    font-size: 19px;
+    padding: 13px 2px;
+    border-radius: 10px;
+  }
+  .circuit {
+    padding: 30px;
+  }
+  .bignum span {
+    font-size: 74px;
+    min-width: 128px;
+  }
+  .bignum button {
+    width: 60px;
+    height: 60px;
+    font-size: 30px;
+  }
+  .restBtn {
+    padding: 9px 14px;
+    font-size: 11.5px;
+  }
+
+  .ladder {
+    padding: 20px;
+    margin-bottom: 0;
+  }
+  .rung {
+    padding: 9px 0;
+  }
+  .rung .lbl {
+    font-size: 14.5px;
+  }
+
+  .target {
+    padding: 16px 20px;
+    border-left-width: 4px;
+    margin-bottom: 0;
+  }
+  .target-val b {
+    font-size: 24px;
+  }
+  .stat {
+    padding: 20px;
+  }
+  .stat b {
+    font-size: 34px;
+  }
+  .badge {
+    padding: 15px;
+  }
+  .bars {
+    height: 130px;
+    gap: 7px;
+  }
+  /* Bars are flex:1, so two data points would otherwise become two slabs half
+     the width of the panel. Cap them and the sparse charts read as a series. */
+  .bars div {
+    max-width: 46px;
+  }
+  .target .bars {
+    height: 40px;
+  }
+
+  .log li {
+    padding: 14px 4px;
+    font-size: 13.5px;
+  }
+  .row input,
+  .wrow input,
+  .paste,
+  .numfield input {
+    border-radius: 11px;
+    padding: 13px 14px;
+  }
+  button.act {
+    padding: 16px;
+    border-radius: 12px;
+    letter-spacing: 0.12em;
+  }
+  button.ghost {
+    padding: 13px;
+    border-radius: 11px;
+  }
+  .suppTake {
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+  .mealshot {
+    max-height: 320px;
+    border-radius: 12px;
+  }
+
+  /* Pointer and keyboard both exist on an iPad; the phone build assumed
+     neither. */
+  @media (hover: hover) {
+    .picker button:hover,
+    button.ghost:hover,
+    .restBtn:hover,
+    .suppTake:hover {
+      border-color: var(--brass-dim);
+    }
+    .day[role='button']:hover {
+      border-color: var(--steel);
+      background: var(--raise);
+    }
+    .rung:hover .lbl {
+      color: var(--chalk);
+    }
+  }
+  :focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+
+  /* ---- floating furniture, re-hung off the sidebar ---- */
+  .toast {
+    left: calc(var(--sidebar) + (100vw - var(--sidebar)) / 2);
+    bottom: 32px;
+    padding: 13px 24px;
+    font-size: 13px;
+  }
+  .restBar {
+    left: calc(var(--sidebar) + var(--stage-x));
+    right: var(--stage-x);
+    bottom: 28px;
+    max-width: 520px;
+    margin: 0;
+    border-radius: var(--r);
+    padding: 14px 16px;
+  }
+
+  /* Two cards abreast is the whole point of the extra width, but only where
+     the card survives being halved: targets and ladders do, at this size. */
+  .cardGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--gap);
+    align-items: start;
+  }
+  .stats,
+  .badges {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--gap);
+  }
+  .stats {
+    margin-bottom: var(--gap);
+  }
+}
+
+/* ============================================================
+   Tier 2 — iPad landscape and iPad Pro (1000px and up).
+   Now there is room to put two things beside each other and
+   still read both, so the views split into columns.
+   ============================================================ */
+@media (min-width: 1000px) and (min-height: 600px) {
+  :root {
+    --sidebar: 264px;
+    --gap: 22px;
+    --r: 18px;
+    --stage-x: 44px;
+  }
+
+  .sidebar h1 {
+    font-size: 42px;
+  }
+  .sidebarTop {
+    padding: 0 26px;
+  }
+  nav button {
+    padding: 13px 14px;
+    font-size: 15px;
+  }
+
+  .stage {
+    padding-top: calc(env(safe-area-inset-top) + 44px);
+  }
+  .wrap {
+    max-width: 1120px;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 40px var(--gap);
+    align-items: start;
+  }
+  .pane {
+    display: block;
+    min-width: 0;
+  }
+  /* Today reads as state-of-play beside the session itself, so its columns
+     are weighted rather than even, and the left one stays put while the
+     exercise list scrolls. */
+  .splitAside {
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    gap: var(--gap);
+  }
+  .paneSide {
+    position: sticky;
+    top: 24px;
+  }
+
+  .cardGrid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  .pane > h3.sub:first-child {
+    margin-top: 0;
+  }
+
+  h2 {
+    margin: 46px 0 18px;
+  }
+  .bars {
+    height: 150px;
+  }
+  .mealshot {
+    max-height: 380px;
+  }
+}
+
+/* A 12.9" iPad Pro in landscape is wider than most laptops; three target
+   cards fit there without any of them looking stretched. */
+@media (min-width: 1320px) and (min-height: 600px) {
+  .wrap {
+    max-width: 1240px;
+  }
+  .cardGrid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  .splitAside {
+    grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  }
+}

@@ -122,9 +122,11 @@ export function Health({ store }: { store: Store }) {
         </div>
       )}
 
-      {verdict.results.map((t) => (
-        <TargetCard key={t.id} t={t} />
-      ))}
+      <div className="cardGrid">
+        {verdict.results.map((t) => (
+          <TargetCard key={t.id} t={t} />
+        ))}
+      </div>
 
       <h2>Sync Apple Health</h2>
       <p className="note" style={{ margin: '0 0 14px' }}>
@@ -134,72 +136,78 @@ export function Health({ store }: { store: Store }) {
         A browser can't read Apple Health directly, so the data has to be handed over — either route below works.
       </p>
 
-      <h3 className="sub">Daily — the Shortcut</h3>
-      <button className="act" onClick={() => jsonRef.current?.click()}>
-        📂 Import from Files
-      </button>
-      <input
-        ref={jsonRef}
-        type="file"
-        accept="application/json,.json"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          if (files.length) void importFiles(files);
-          e.target.value = '';
-        }}
-      />
-      <p className="note">
-        Build the Shortcut once — the recipe is in <code>HEALTH-SYNC.md</code>. It saves a JSON file
-        to iCloud Drive on a schedule; pick it here and you're done. Nothing leaves your phone. You
-        can select several files at once if you've been away, and re-importing a day you already have
-        is harmless.
-      </p>
+      <div className="split">
+        <div className="pane">
+          <h3 className="sub">Daily — the Shortcut</h3>
+          <button className="act" onClick={() => jsonRef.current?.click()}>
+            📂 Import from Files
+          </button>
+          <input
+            ref={jsonRef}
+            type="file"
+            accept="application/json,.json"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = [...(e.target.files ?? [])];
+              if (files.length) void importFiles(files);
+              e.target.value = '';
+            }}
+          />
+          <p className="note">
+            Build the Shortcut once — the recipe is in <code>HEALTH-SYNC.md</code>. It saves a JSON file
+            to iCloud Drive on a schedule; pick it here and you're done. Nothing leaves your phone. You
+            can select several files at once if you've been away, and re-importing a day you already have
+            is harmless.
+          </p>
 
-      <details className="fold">
-        <summary>Paste instead</summary>
-        <textarea
-          className="paste"
-          placeholder='Paste the Shortcut output here, e.g. {"t":"health8w","v":1,"days":[…]}'
-          value={paste}
-          onChange={(e) => setPaste(e.target.value)}
-          rows={4}
-        />
-        <button
-          className="ghost"
-          onClick={() => importShortcut(paste)}
-          disabled={!paste.trim()}
-        >
-          Import pasted
-        </button>
-      </details>
-
-      <h3 className="sub">One-off — full history</h3>
-      <p className="note" style={{ margin: '0 0 10px' }}>
-        Health app → your photo → Export All Health Data. That gives a zip; uncompress it in Files
-        (long-press → Uncompress) and pick <code>export.xml</code>. It can be hundreds of megabytes,
-        so it's parsed in the background a chunk at a time.
-      </p>
-      <button className="ghost" onClick={() => xmlRef.current?.click()} disabled={!!progress}>
-        {progress ? `Reading… ${progress.pct}% · ${progress.records.toLocaleString()} records` : 'Pick export.xml'}
-      </button>
-      <input
-        ref={xmlRef}
-        type="file"
-        accept=".xml,text/xml,application/xml"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) importExport(f);
-          e.target.value = '';
-        }}
-      />
-      {progress && (
-        <div className="xpbar" style={{ marginTop: 10 }}>
-          <div style={{ width: `${progress.pct}%` }} />
+          <details className="fold">
+            <summary>Paste instead</summary>
+            <textarea
+              className="paste"
+              placeholder='Paste the Shortcut output here, e.g. {"t":"health8w","v":1,"days":[…]}'
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+              rows={4}
+            />
+            <button
+              className="ghost"
+              onClick={() => importShortcut(paste)}
+              disabled={!paste.trim()}
+            >
+              Import pasted
+            </button>
+          </details>
         </div>
-      )}
+
+        <div className="pane">
+          <h3 className="sub">One-off — full history</h3>
+          <p className="note" style={{ margin: '0 0 10px' }}>
+            Health app → your photo → Export All Health Data. That gives a zip; uncompress it in Files
+            (long-press → Uncompress) and pick <code>export.xml</code>. It can be hundreds of megabytes,
+            so it's parsed in the background a chunk at a time.
+          </p>
+          <button className="ghost" onClick={() => xmlRef.current?.click()} disabled={!!progress}>
+            {progress ? `Reading… ${progress.pct}% · ${progress.records.toLocaleString()} records` : 'Pick export.xml'}
+          </button>
+          <input
+            ref={xmlRef}
+            type="file"
+            accept=".xml,text/xml,application/xml"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importExport(f);
+              e.target.value = '';
+            }}
+          />
+          {progress && (
+            <div className="xpbar" style={{ marginTop: 10 }}>
+              <div style={{ width: `${progress.pct}%` }} />
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
