@@ -24,7 +24,7 @@ data says so rather than guessing.
 | Target | Window | In range |
 |---|---|---|
 | **Weight trend** | 28-day least-squares slope | +0.25 to +0.5 kg/mo (lean gain) |
-| **Training frequency** | 7 days | ≥ 4 sessions |
+| **Training frequency** | 7 days | ≥ 4 full sessions |
 | **Protein** | 7-day mean | 1.6–2.2 g/kg bodyweight |
 | **Recovery** | 7-day mean vs 28-day baseline | resting HR ≤ +5%, HRV ≥ −10% |
 | **Sleep** | 7-day mean | ≥ 7 h |
@@ -35,7 +35,7 @@ data says so rather than guessing.
 The goal is a setting. Switching to recomp or fat loss moves the weight band, and the
 calorie target follows it automatically.
 
-### Three decisions worth knowing about
+### Four decisions worth knowing about
 
 **The surplus comes from the band, not from folklore.** "Eat +250 to bulk" works out at
 roughly 1 kg a month — above the +0.25–0.5 kg band this app steers by. The surplus is
@@ -47,6 +47,13 @@ intake against your own weight trend. That makes intake-minus-target algebraical
 the weight trend restated in calories — the two cannot disagree, so scoring both would count
 the same evidence twice. It still earns its place by converting a slope into an amount of
 food: *"averaging 2,650, that's 95 short — add about that much."*
+
+**A core day is not a fourth session.** Session D — hanging and floor core, Pallof press,
+side planks — sits on Wednesday because the trunk recovers fast and 20 minutes of abs costs
+almost nothing systemically. That same cheapness is why it doesn't count toward the four:
+three sessions plus an ab session is three sessions, and a target that said otherwise would
+report a full week that never happened. Core days are logged, shown in the weekly counter,
+and paid half XP; the frequency target names them as context.
 
 **Photo estimates are wrong, and that's survivable.** Portion mass is guesswork from a
 photo; expect ±20–30%. But because maintenance is measured from those same numbers, a
@@ -91,9 +98,9 @@ Without a Worker configured, this one tab is disabled and the rest of the app is
 ```bash
 npm install
 npm run dev            # app on :5173
-npm test               # 89 unit tests
-npm test -w worker     # 22 worker tests
-npm run e2e            # 35 checks in real Chromium against the built app
+npm test               # 145 unit tests
+npm test -w worker     # 26 worker tests
+npm run e2e            # 53 checks in real Chromium against the built app (build first)
 npm run typecheck
 ```
 
