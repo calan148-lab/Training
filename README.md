@@ -86,6 +86,32 @@ Without a Worker configured, this one tab is disabled and the rest of the app is
 
 ---
 
+## Two layouts
+
+The phone layout is dense on purpose: a lot of app has to fit above the fold on
+a 6-inch screen, and every gap costs a scroll. On an iPad that density is just
+wasted room, so from 740px wide the app rearranges rather than stretches.
+
+- **The tab bar becomes a sidebar.** Masthead, week bar and tabs move to a fixed
+  left rail — the labels get their real names back (*Nutrition*, *Progressions*)
+  and the bottom of the screen is handed back to the content.
+- **Cards get room.** Bigger radii, more padding, a raised edge and a soft
+  shadow, and roughly double the space between sections.
+- **From 1000px the views split into columns.** Today puts the week, rank and
+  verdict in a sticky left column beside the session you're actually doing;
+  targets and progressions go two abreast; Stats and Settings split in half.
+
+None of it is a second codebase. The wrappers the columns need — `.split`,
+`.pane`, `.cardGrid` — are `display:contents` until a media query turns them
+into grids, so on a phone they generate no boxes at all and the markup renders
+exactly as it did before. That is verified rather than assumed: the phone
+screenshots are pixel-identical across the change.
+
+`app/src/styles.ipad.css` holds all of it, behind media queries, separate from
+the phone stylesheet it never edits.
+
+---
+
 ## Development
 
 ```bash
@@ -98,6 +124,11 @@ npm run typecheck
 ```
 
 CI runs all of it on every push, then deploys to Pages from the default branch.
+
+To see the layouts rather than read about them, `node e2e/shot.mjs <url> <outDir>
+414x896 834x1194 1194x834` screenshots every tab at each size into its own folder.
+It seeds a populated app first, so the shots are of the thing in use rather than
+of empty states.
 
 ### What the tests actually cover
 

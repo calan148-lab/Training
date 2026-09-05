@@ -18,7 +18,10 @@ export default defineConfig({
         theme_color: '#0F1319',
         background_color: '#0F1319',
         display: 'standalone',
-        orientation: 'portrait',
+        // Was portrait-locked, which is right for a phone and wrong for the
+        // device this layout was added for: an iPad is used landscape as often
+        // as not, and the wide layout is the reason.
+        orientation: 'any',
         icons: [
           { src: 'icon.png', sizes: '180x180', type: 'image/png' },
           { src: 'icon.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },

@@ -28,7 +28,7 @@ body{
 @media (display-mode:standalone){
   header{padding-top:14px}
 }
-.wrap{max-width:620px;margin:0 auto;padding:0 18px}
+.wrap,.sidebarTop{max-width:620px;margin:0 auto;padding:0 18px}
 
 /* ---- masthead ---- */
 header{padding:26px 0 18px;border-bottom:1px solid var(--steel);margin-bottom:22px}
@@ -41,7 +41,10 @@ h1{font-family:var(--display);font-weight:900;font-size:34px;line-height:.95;let
 .weekmeta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--dust);margin-top:8px;letter-spacing:.06em}
 
 h2{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--dust);margin:30px 0 12px}
-h2:first-child{margin-top:0}
+/* The first heading on a view sits flush; the wrappers the iPad layout needs
+   are display:contents, so the first heading inside the first pane of the
+   first split is still the first thing on the page. */
+.view>h2:first-child,.view>.split:first-child>.pane:first-child>h2:first-child{margin-top:0}
 
 /* ---- session picker ---- */
 /* ---- week calendar strip ---- */
@@ -257,6 +260,8 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
 /* six tabs need to fit a phone, so the labels shrink rather than wrap */
 nav{display:flex}
 nav button{flex:1;min-width:0;font-size:10px;letter-spacing:.04em;padding:0 2px}
+/* The icon and the long label are the iPad rail's; a phone shows neither. */
+.tabIcon,.tabWide{display:none}
 
 .strip{display:block;padding:12px 14px;border-radius:11px;margin:0 0 16px;border:1px solid var(--steel);background:var(--slate)}
 .strip b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase}
