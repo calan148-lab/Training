@@ -82,6 +82,24 @@ function check(name, cond, detail = '') {
   else { failures.push(`${name}${detail ? ` — ${detail}` : ''}`); console.log(`  FAIL ${name} ${detail}`); }
 }
 
+/**
+ * Fixture dates, relative to the day the suite runs.
+ *
+ * Every target judges on a window ending today, so a fixture pinned to fixed
+ * calendar dates slides out of those windows as real time passes and the suite
+ * starts failing for no reason but the date. Anchoring to `now` keeps what each
+ * assertion is actually testing true on any day it runs.
+ */
+const dayISO = (offset) => new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10);
+
+/**
+ * Day `n` of the synthetic export, 0 through 27.
+ *
+ * Day 27 is today, so the last night of sleep lands inside the 7-day window the
+ * sleep target judges on — the whole point of a trailing fixture.
+ */
+const exportDay = (n) => dayISO(n - 27);
+
 /** The v1 payload a real phone would be carrying. */
 const V1 = {
   start: '2026-08-04',
@@ -98,7 +116,7 @@ const V1 = {
 /** A synthetic export.xml with values we can verify by hand. */
 function buildExportXml() {
   const rows = [];
-  const day = (n) => new Date(Date.UTC(2026, 7, 4) + n * 864e5).toISOString().slice(0, 10);
+  const day = exportDay;
   for (let i = 0; i < 28; i++) {
     const d = day(i);
     // Weight climbing 0.4 kg over 28 days ~ +0.43 kg/month: inside the band.
@@ -211,7 +229,7 @@ try {
   const days = afterImport.health.days;
   check('28 days imported', Object.keys(days).length === 28, `got ${Object.keys(days).length}`);
 
-  const sample = days['2026-08-10'];
+  const sample = days[exportDay(6)];
   check('steps summed across the day', sample?.steps === 8412, `got ${sample?.steps}`);
   check('active energy captured', sample?.aen === 540, `got ${sample?.aen}`);
   check('resting HR averaged', sample?.rhr === 51, `got ${sample?.rhr}`);
@@ -257,8 +275,8 @@ try {
   const rolling = JSON.stringify({
     t: 'health8w', v: 1,
     days: [
-      { d: '2026-08-31', wt: 71.8, steps: 8500 },
-      { d: '2026-09-01', wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+      { d: dayISO(-28), wt: 71.8, steps: 8500 },
+      { d: dayISO(-1), wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
     ],
   });
   await page.locator('input[accept*="json"]').setInputFiles({
@@ -276,16 +294,16 @@ try {
 
   console.log('\n4c. Several files at once, for when you have been away');
   await page.locator('input[accept*="json"]').setInputFiles([
-    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from('[{"d":"2026-07-10","steps":7000}]') },
-    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from('{"d":"2026-07-11","steps":7100}') },
+    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from(`[{"d":"${dayISO(-60)}","steps":7000}]`) },
+    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(`{"d":"${dayISO(-59)}","steps":7100}`) },
   ]);
   check('multi-file, bare array and single object both accepted',
     await waitForToast(page, '2 new days').catch(() => false));
-  const both = await waitForState(page, (x) => !!x.health.days['2026-07-10'] && !!x.health.days['2026-07-11'], 'multi-file merge');
-  check('both files landed with their values', both.health.days['2026-07-10'].steps === 7000 && both.health.days['2026-07-11'].steps === 7100);
+  const both = await waitForState(page, (x) => !!x.health.days[dayISO(-60)] && !!x.health.days[dayISO(-59)], 'multi-file merge');
+  check('both files landed with their values', both.health.days[dayISO(-60)].steps === 7000 && both.health.days[dayISO(-59)].steps === 7100);
 
-  const merged = (await waitForState(page, (d) => !!d.health.days['2026-09-01'], 'shortcut merge'))
-    .health.days['2026-09-01'];
+  const merged = (await waitForState(page, (d) => !!d.health.days[dayISO(-1)], 'shortcut merge'))
+    .health.days[dayISO(-1)];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
   console.log('\n5. Paste still works, and a stale Shortcut is rejected loudly');
