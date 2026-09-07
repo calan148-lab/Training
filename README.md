@@ -62,8 +62,9 @@ A browser cannot read HealthKit — no API exists. The data is handed over two w
 want both: **[HEALTH-SYNC.md](HEALTH-SYNC.md)** has the Shortcut recipe and the export
 walkthrough.
 
-- **Daily** — a Shortcut you build once dumps the day's numbers as JSON; paste or open it
-  in the app.
+- **Daily** — a Shortcut you build once dumps the week's numbers as JSON. **Sync now** on
+  the Target tab runs it and takes the answer straight back off the URL iOS returns on;
+  the file it writes to iCloud Drive, a paste, or the morning automation all still work.
 - **One-off** — `export.xml` from Health backfills months of history so trends mean
   something immediately. It's streamed in a Web Worker, since real exports run to hundreds
   of megabytes.
@@ -91,9 +92,9 @@ Without a Worker configured, this one tab is disabled and the rest of the app is
 ```bash
 npm install
 npm run dev            # app on :5173
-npm test               # 89 unit tests
-npm test -w worker     # 22 worker tests
-npm run e2e            # 35 checks in real Chromium against the built app
+npm test               # 152 unit tests
+npm test -w worker     # 26 worker tests
+npm run e2e            # 61 checks in real Chromium against the built app
 npm run typecheck
 ```
 
