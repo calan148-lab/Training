@@ -88,15 +88,56 @@ In the Shortcuts app, new shortcut, then:
 1. **Repeat with Each** over the last 7 days. Simplest version: add a **Number** action
    set to `7`, then **Repeat** that many times; inside the loop, take the current date,
    **Adjust Date** by minus `Repeat Index` days, and **Format Date** as `yyyy-MM-dd`.
-2. Inside the loop, for each metric you want, add **Find Health Samples**:
-   - Set the type (Body Mass, Resting Heart Rate, Steps, and so on).
-   - Filter `Start Date` `is` the date from step 1.
-   - Choose the aggregation the app expects — *Average* for resting heart rate and
-     HRV, *Sum* for steps and active energy, *Latest* for body mass and body fat.
-3. **Text** — assemble one `{"d": …, …}` object per iteration.
-4. After the loop, **Combine Text** with `,` as separator, wrap in `[` `]`.
+   Save it as `Day`.
+2. Inside the loop, for each metric you want, add **Find Health Samples** with the
+   type, unit and aggregation from this table. The unit matters more than it looks:
+   two of these fail *silently* instead of getting dropped.
+
+   | Key | Health type | Unit to set | Aggregation |
+   |---|---|---|---|
+   | `wt` | Body Mass | kg — **lb passes validation and lands as a plausible, wrong number** | Latest |
+   | `bf` | Body Fat Percentage | percent (`14.2`, not `0.142`) | Latest |
+   | `rhr` | Resting Heart Rate | bpm | Average |
+   | `hrv` | Heart Rate Variability SDNN | ms | Average |
+   | `sleep` | Sleep Analysis (asleep stages only) | hours — minutes fails the `[0,24]` bound and is dropped | Sum |
+   | `steps` | Step Count | count | Sum |
+   | `aen` | Active Energy Burned | kcal — **kJ passes validation and lands as a plausible, wrong number** | Sum |
+   | `wo` | Workouts | count | Count |
+
+   Don't trust whatever unit Shortcuts defaults to — set it explicitly in each action.
+   A wrong unit on `bf` or `sleep` gets dropped, so a target just sits on "No data" and
+   you notice. A wrong unit on `wt` or `aen` sits inside the app's plausibility bounds
+   and gets stored as a real, wrong number, quietly bending the weight trend or the
+   energy-balance context.
+
+   `steps`, `aen`, `sleep` and `wo` also have a lower bound of `0`, so a day with no
+   samples for one of them comes back as literal `0` — a real reading, not a missing
+   one, and it will drag that metric's baseline down. Wrap each of those four in
+   **If → [value] has any value**, so a day without data omits the key instead of
+   sending `0`. `wt`, `bf`, `rhr` and `hrv` don't need this: their lower bounds (20, 1,
+   25, 1) are already above anything a real sample could be confused with.
+3. **Text** — assemble one JSON object per iteration, with every value a bare
+   variable and no quotes around numbers:
+
+   ```
+   {"d":Day,"wt":Weight,"bf":BodyFat,"rhr":RestingHR,"hrv":HRV,"sleep":Sleep,"steps":Steps,"aen":ActiveEnergy,"wo":Workouts}
+   ```
+
+   Quoting a number — `"wt": "71.4 kg"` instead of `"wt": 71.4` — turns it into a
+   string, and the parser silently skips string values rather than erroring, so you'd
+   just see fewer fields land than you sent. If a variable can be empty (from step 2's
+   If-guards), keep the surrounding `"key":value,` inside that same guard so a missing
+   sample removes its whole pair rather than leaving a stray comma — `"wt": ,` is
+   invalid JSON and rejects the *entire* payload, not just that one field.
+4. After the loop, **Combine Text** with `,` as separator, wrap in
+   `{"t":"health8w","v":1,"days":[` and `]}`.
 5. **Save File** → iCloud Drive, a fixed path like `Shortcuts/health.json`,
-   with *Overwrite If File Exists* switched on.
+   with *Overwrite If File Exists* switched on. This is what the home-screen app
+   reads, since iOS can't hand a callback to an installed web app.
+6. **Text**, last, holding the same combined JSON from step 4. **This has to be the
+   final action** — a Shortcut's result is whatever its last action produced, so if
+   Save File is last instead, the *Sync now* button gets handed a file rather than
+   JSON, and comes back empty every time.
 
 Overwriting one fixed file is deliberate: you always pick the same file, and because
 it carries a rolling week you never need to hunt for older ones.
