@@ -223,7 +223,10 @@ try {
   const days = afterImport.health.days;
   check('28 days imported', Object.keys(days).length === 28, `got ${Object.keys(days).length}`);
 
-  const sample = days['2026-08-10'];
+  // Mid-range day of the export, addressed relatively like the fixture that
+  // generated it. A fixed date here silently falls outside the window as the
+  // days pass, and every field assertion below then reads undefined.
+  const sample = days[dayISO(-14)];
   check('steps summed across the day', sample?.steps === 8412, `got ${sample?.steps}`);
   check('active energy captured', sample?.aen === 540, `got ${sample?.aen}`);
   check('resting HR averaged', sample?.rhr === 51, `got ${sample?.rhr}`);
