@@ -2,7 +2,11 @@
  * Screenshot the running dev server. Not part of CI — a hand tool for
  * "show me what it looks like right now".
  *
- * Usage: node e2e/shot.mjs [url] [outDir]
+ * Usage: node e2e/shot.mjs [url] [outDir] [WxH ...]
+ *
+ * Sizes default to the phone the app was built for. Pass others to check the
+ * wider layouts, e.g. 834x1194 (iPad Pro 11 portrait) and 1194x834 (landscape);
+ * each size gets its own subdirectory.
  */
 import { chromium } from 'playwright';
 import { readdir, mkdir } from 'node:fs/promises';
@@ -11,6 +15,11 @@ import { join, resolve } from 'node:path';
 
 const BASE = process.argv[2] ?? 'http://localhost:5173';
 const OUT = resolve(process.argv[3] ?? 'e2e/shots/live');
+const SIZES = (process.argv.slice(4).length ? process.argv.slice(4) : ['414x896']).map((s) => {
+  const [width, height] = s.split('x').map(Number);
+  if (!width || !height) throw new Error(`bad size "${s}" — expected WxH`);
+  return { name: s, width, height };
+});
 
 async function launchChromium() {
   try {
@@ -68,39 +77,58 @@ function health() {
   return days;
 }
 
-await mkdir(OUT, { recursive: true });
-const browser = await launchChromium();
-const ctx = await browser.newContext({ viewport: { width: 414, height: 896 }, deviceScaleFactor: 2 });
-const page = await ctx.newPage();
-
-await page.addInitScript((v1) => localStorage.setItem('calis8w', JSON.stringify(v1)), V1);
-await page.goto(BASE, { waitUntil: 'networkidle' });
-await page.waitForSelector('header h1', { timeout: 20000 });
-
-// Seed Health data through the app's own import path, not by writing the DB.
-await page.locator('nav button', { hasText: 'Target' }).click();
-const payload = JSON.stringify({
-  t: 'health8w',
-  v: 1,
-  days: Object.entries(health()).map(([d, day]) => ({ d, ...day })),
-});
-await page.locator('textarea.paste').fill(payload);
-await page.locator('button', { hasText: 'Import pasted' }).click();
-await page.waitForFunction(() => document.body.innerText.includes('kg/mo'), { timeout: 20000 });
-
-const tabs = [
-  ['Today', 'today'],
-  ['Target', 'target'],
-  ['Ladders', 'ladders'],
-  ['Food', 'food'],
-  ['Stats', 'stats'],
-  ['Setup', 'setup'],
+/**
+ * Tabs addressed by position, not by label: the rail renames them at iPad
+ * width (Food becomes Nutrition, Ladders becomes Progressions), so matching on
+ * text only works at one of the sizes this script is for. Order is the order
+ * in App.tsx.
+ */
+const TABS = [
+  [0, 'today'],
+  [1, 'ladders'],
+  [2, 'food'],
+  [3, 'target'],
+  [4, 'stats'],
+  [5, 'setup'],
 ];
-for (const [label, name] of tabs) {
-  await page.locator('nav button', { hasText: label }).click();
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: join(OUT, `${name}.png`), fullPage: true });
-  console.log(`shot: ${name}.png`);
+const TARGET_TAB = 3;
+
+const browser = await launchChromium();
+
+for (const size of SIZES) {
+  const dir = SIZES.length > 1 ? join(OUT, size.name) : OUT;
+  await mkdir(dir, { recursive: true });
+
+  const ctx = await browser.newContext({
+    viewport: { width: size.width, height: size.height },
+    deviceScaleFactor: 2,
+  });
+  const page = await ctx.newPage();
+
+  await page.addInitScript((v1) => localStorage.setItem('calis8w', JSON.stringify(v1)), V1);
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForSelector('header h1', { timeout: 20000 });
+
+  // Seed Health data through the app's own import path, not by writing the DB.
+  await page.locator('nav button').nth(TARGET_TAB).click();
+  const payload = JSON.stringify({
+    t: 'health8w',
+    v: 1,
+    days: Object.entries(health()).map(([d, day]) => ({ d, ...day })),
+  });
+  await page.locator('.fold summary', { hasText: 'Paste instead' }).click();
+  await page.locator('textarea.paste').fill(payload);
+  await page.locator('button', { hasText: 'Import pasted' }).click();
+  await page.waitForFunction(() => document.body.innerText.includes('kg/mo'), { timeout: 20000 });
+
+  for (const [index, name] of TABS) {
+    await page.locator('nav button').nth(index).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(dir, `${name}.png`), fullPage: true });
+    console.log(`shot: ${size.name}/${name}.png`);
+  }
+
+  await ctx.close();
 }
 
 await browser.close();

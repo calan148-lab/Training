@@ -225,99 +225,106 @@ export function Meals({ store }: { store: Store }) {
 
   return (
     <section className="view on">
-      <h2>Today's food</h2>
-      <div className="stats">
-        <div className="stat">
-          <b>{Math.round(todayTotals.kcal)}</b>
-          <span>kcal today</span>
+      <div className="split">
+        <div className="pane">
+          <h2>Today's food</h2>
+          <div className="stats">
+            <div className="stat">
+              <b>{Math.round(todayTotals.kcal)}</b>
+              <span>kcal today</span>
+            </div>
+            <div className="stat">
+              <b>{Math.round(todayTotals.protein)}</b>
+              <span>g protein</span>
+            </div>
+          </div>
+
+          {!ready && (
+            <p className="note warnbox">
+              Photo calories need a server holding the API key — a browser can't keep one safely. Add the
+              address and token in Settings; everything else on this page works without it.
+            </p>
+          )}
+
+          {pending ? (
+            <Confirm meal={pending} onSave={(items) => confirm(pending, items)} onDiscard={() => discard(pending)} />
+          ) : (
+            <>
+              <input
+                className="paste"
+                placeholder="Optional: anything the photo won't show — 'cooked in butter', 'fork for scale'"
+                value={hint}
+                onChange={(e) => setHint(e.target.value)}
+              />
+              <button className="act" disabled={busy || !ready} onClick={() => camRef.current?.click()}>
+                {busy ? 'Reading the photo…' : '📷 Photograph a meal'}
+              </button>
+              <input
+                ref={camRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                data-capture="meal"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void capture(f);
+                  e.target.value = '';
+                }}
+              />
+              <p className="note">
+                The estimate is a starting point, not a measurement — portion size is the part a photo
+                can't tell you, so check it before logging. Consistency matters more than precision here:
+                the app works out your maintenance from your own intake against your weight trend, so a
+                steady bias mostly cancels out.
+              </p>
+            </>
+          )}
+
         </div>
-        <div className="stat">
-          <b>{Math.round(todayTotals.protein)}</b>
-          <span>g protein</span>
+
+        <div className="pane">
+          {!!repeatCandidates(d.meals).length && !pending && (
+            <>
+              <h2>Same as last time</h2>
+              <ul className="log">
+                {repeatCandidates(d.meals).map((m) => (
+                  <li key={m.id}>
+                    <span>{m.items.map((i) => i.name).join(', ')}</span>
+                    <button className="ghost" onClick={() => relog(m)}>
+                      {Math.round(m.totals.kcal)} kcal · log
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <h2>Recent meals</h2>
+          <ul className="log">
+            {d.meals.length ? (
+              [...d.meals]
+                .slice(-15)
+                .reverse()
+                .map((m) => (
+                  <li key={m.id}>
+                    <span>
+                      {m.date} · {m.items.map((i) => i.name).join(', ') || m.status}
+                      {m.error && <em className="lowconf"> — {m.error}</em>}
+                    </span>
+                    <b>{m.status === 'confirmed' ? `${Math.round(m.totals.kcal)} kcal` : m.status}</b>
+                  </li>
+                ))
+            ) : (
+              <li>
+                <span>Nothing logged yet.</span>
+              </li>
+            )}
+          </ul>
+
+          <SupplementManager store={store} />
         </div>
       </div>
-
-      {!ready && (
-        <p className="note warnbox">
-          Photo calories need a server holding the API key — a browser can't keep one safely. Add the
-          address and token in Settings; everything else on this page works without it.
-        </p>
-      )}
-
-      {pending ? (
-        <Confirm meal={pending} onSave={(items) => confirm(pending, items)} onDiscard={() => discard(pending)} />
-      ) : (
-        <>
-          <input
-            className="paste"
-            placeholder="Optional: anything the photo won't show — 'cooked in butter', 'fork for scale'"
-            value={hint}
-            onChange={(e) => setHint(e.target.value)}
-          />
-          <button className="act" disabled={busy || !ready} onClick={() => camRef.current?.click()}>
-            {busy ? 'Reading the photo…' : '📷 Photograph a meal'}
-          </button>
-          <input
-            ref={camRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            data-capture="meal"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void capture(f);
-              e.target.value = '';
-            }}
-          />
-          <p className="note">
-            The estimate is a starting point, not a measurement — portion size is the part a photo
-            can't tell you, so check it before logging. Consistency matters more than precision here:
-            the app works out your maintenance from your own intake against your weight trend, so a
-            steady bias mostly cancels out.
-          </p>
-        </>
-      )}
-
-      {!!repeatCandidates(d.meals).length && !pending && (
-        <>
-          <h2>Same as last time</h2>
-          <ul className="log">
-            {repeatCandidates(d.meals).map((m) => (
-              <li key={m.id}>
-                <span>{m.items.map((i) => i.name).join(', ')}</span>
-                <button className="ghost" onClick={() => relog(m)}>
-                  {Math.round(m.totals.kcal)} kcal · log
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      <h2>Recent meals</h2>
-      <ul className="log">
-        {d.meals.length ? (
-          [...d.meals]
-            .slice(-15)
-            .reverse()
-            .map((m) => (
-              <li key={m.id}>
-                <span>
-                  {m.date} · {m.items.map((i) => i.name).join(', ') || m.status}
-                  {m.error && <em className="lowconf"> — {m.error}</em>}
-                </span>
-                <b>{m.status === 'confirmed' ? `${Math.round(m.totals.kcal)} kcal` : m.status}</b>
-              </li>
-            ))
-        ) : (
-          <li>
-            <span>Nothing logged yet.</span>
-          </li>
-        )}
-      </ul>
-
-      <SupplementManager store={store} />
     </section>
   );
 }

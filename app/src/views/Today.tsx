@@ -177,107 +177,122 @@ export function Today({ store }: { store: Store }) {
 
   return (
     <section className="view on">
-      <Calendar d={d} onPick={setCur} />
-      <Rank d={d} />
-      <StatusStrip verdict={verdict} />
-
-      <div className="picker">
-        {(['A', 'B', 'C'] as SessionType[]).map((t) => (
-          <button key={t} aria-pressed={cur === t} onClick={() => setCur(t)}>
-            <span className="let">{t}</span>
-            <span className="nm">{SNAME[t]}</span>
-          </button>
-        ))}
-      </div>
-
-      {cur === 'C' ? (
-        <div className="circuit">
-          <ul>
-            <li>4 pull-ups</li>
-            <li>8 pushups</li>
-            <li>12 air squats</li>
-            <li>20s hollow hold</li>
-          </ul>
-          <div className="bignum">
-            <button onClick={() => setRounds((n) => Math.max(0, n - 1))} aria-label="One fewer round">
-              −
-            </button>
-            <span>{rounds}</span>
-            <button onClick={() => setRounds((n) => n + 1)} aria-label="One more round">
-              +
-            </button>
-          </div>
-          <small>Rounds in 20 minutes</small>
+      {/*
+        Two panes: the state of the week on the left, the session you are
+        actually doing on the right. Both are display:contents until an iPad
+        is wide enough to hold them side by side, so a phone still gets one
+        column in exactly this order.
+      */}
+      <div className="split splitAside">
+        <div className="pane paneSide">
+          <Calendar d={d} onPick={setCur} />
+          <Rank d={d} />
+          <StatusStrip verdict={verdict} />
         </div>
-      ) : (
-        SESSIONS[cur].ex.map((e, i) => {
-          const key = (e.k === 'core' ? coreMode : e.k) as LadderKey;
-          const ladder = LADDERS[key];
-          const name = e.n ?? ladder?.name ?? e.k;
-          const varia = e.v ?? ladder?.steps[d.ladders[key] ?? 0] ?? '';
-          return (
-            <div className="ex" key={`${cur}-${i}`}>
-              <div className="ex-top">
-                <span className="ex-name">{name}</span>
-                <span className="ex-target">{e.t}</span>
-              </div>
-              <div className="ex-var">{varia}</div>
-              <div className="sets">
-                {[...Array(e.sets)].map((_, j) => {
-                  const id = `${i}-${j}`;
-                  const v = reps[id] ?? '';
-                  return (
-                    <input
-                      key={id}
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="—"
-                      aria-label={`${name} set ${j + 1}`}
-                      className={Number(v) >= e.top ? 'hit' : ''}
-                      value={v}
-                      onChange={(ev) => setReps((r) => ({ ...r, [id]: ev.target.value }))}
-                    />
-                  );
-                })}
-              </div>
-              <div className="ex-foot">
-                <a
-                  className="form"
-                  target="_blank"
-                  rel="noopener"
-                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${e.n ?? varia} proper form tutorial`)}`}
-                >
-                  Form check ↗
-                </a>
-                <button type="button" className="restBtn" onClick={() => startRest(e.rest)}>
-                  ⏱ Rest {e.rest}s
+
+        <div className="pane paneMain">
+          <div className="picker">
+            {(['A', 'B', 'C'] as SessionType[]).map((t) => (
+              <button key={t} aria-pressed={cur === t} onClick={() => setCur(t)}>
+                <span className="let">{t}</span>
+                <span className="nm">{SNAME[t]}</span>
+              </button>
+            ))}
+          </div>
+
+          {cur === 'C' ? (
+            <div className="circuit">
+              <ul>
+                <li>4 pull-ups</li>
+                <li>8 pushups</li>
+                <li>12 air squats</li>
+                <li>20s hollow hold</li>
+              </ul>
+              <div className="bignum">
+                <button onClick={() => setRounds((n) => Math.max(0, n - 1))} aria-label="One fewer round">
+                  −
+                </button>
+                <span>{rounds}</span>
+                <button onClick={() => setRounds((n) => n + 1)} aria-label="One more round">
+                  +
                 </button>
               </div>
+              <small>Rounds in 20 minutes</small>
             </div>
-          );
-        })
-      )}
+          ) : (
+            SESSIONS[cur].ex.map((e, i) => {
+              const key = (e.k === 'core' ? coreMode : e.k) as LadderKey;
+              const ladder = LADDERS[key];
+              const name = e.n ?? ladder?.name ?? e.k;
+              const varia = e.v ?? ladder?.steps[d.ladders[key] ?? 0] ?? '';
+              return (
+                <div className="ex" key={`${cur}-${i}`}>
+                  <div className="ex-top">
+                    <span className="ex-name">{name}</span>
+                    <span className="ex-target">{e.t}</span>
+                  </div>
+                  <div className="ex-var">{varia}</div>
+                  <div className="sets">
+                    {[...Array(e.sets)].map((_, j) => {
+                      const id = `${i}-${j}`;
+                      const v = reps[id] ?? '';
+                      return (
+                        <input
+                          key={id}
+                          type="number"
+                          inputMode="numeric"
+                          placeholder="—"
+                          aria-label={`${name} set ${j + 1}`}
+                          className={Number(v) >= e.top ? 'hit' : ''}
+                          value={v}
+                          onChange={(ev) => setReps((r) => ({ ...r, [id]: ev.target.value }))}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="ex-foot">
+                    <a
+                      className="form"
+                      target="_blank"
+                      rel="noopener"
+                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${e.n ?? varia} proper form tutorial`)}`}
+                    >
+                      Form check ↗
+                    </a>
+                    <button type="button" className="restBtn" onClick={() => startRest(e.rest)}>
+                      ⏱ Rest {e.rest}s
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
 
-      {cur === 'A' && (
-        <div className="swap">
-          <span>Core</span>
-          <button aria-pressed={coreMode === 'core'} onClick={() => setCoreMode('core')}>
-            Hanging
+          {cur === 'A' && (
+            <div className="swap">
+              <span>Core</span>
+              <button aria-pressed={coreMode === 'core'} onClick={() => setCoreMode('core')}>
+                Hanging
+              </button>
+              <button aria-pressed={coreMode === 'floor'} onClick={() => setCoreMode('floor')}>
+                Floor
+              </button>
+            </div>
+          )}
+
+          <SupplementDoses store={store} />
+
+          <button className="act" style={{ marginTop: 14 }} onClick={save}>
+            Save session
           </button>
-          <button aria-pressed={coreMode === 'floor'} onClick={() => setCoreMode('floor')}>
-            Floor
-          </button>
+          <p className="note">
+            Hit the top of the rep range on every set, twice in a row? Go to Ladders and climb a rung.
+          </p>
+          <p className="note" style={{ marginTop: 18 }}>
+            Week {weekNo(d)} of 8 · {thisWeekCount(d)} sessions this week
+          </p>
         </div>
-      )}
-
-      <SupplementDoses store={store} />
-
-      <button className="act" style={{ marginTop: 14 }} onClick={save}>
-        Save session
-      </button>
-      <p className="note">
-        Hit the top of the rep range on every set, twice in a row? Go to Ladders and climb a rung.
-      </p>
+      </div>
 
       {rest && (
         <div className="restBar show">
@@ -294,9 +309,6 @@ export function Today({ store }: { store: Store }) {
           </button>
         </div>
       )}
-      <p className="note" style={{ marginTop: 18 }}>
-        Week {weekNo(d)} of 8 · {thisWeekCount(d)} sessions this week
-      </p>
     </section>
   );
 }
