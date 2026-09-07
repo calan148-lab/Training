@@ -178,12 +178,6 @@
     color: var(--dust);
     transition: color 0.16s;
   }
-  .tabShort {
-    display: none;
-  }
-  .tabWide {
-    display: block;
-  }
 
   /* ---- typographic scale ----
      Bigger, and further apart. A heading gets a short brass tick above it

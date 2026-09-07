@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import './styles.css';
 import './styles.ipad.css';
 import { weekNo } from './domain/progress';
+import { isSyncPending, readHandoff } from './health/handoff';
 import { useAppData } from './useAppData';
 import { Health } from './views/Health';
 import { Ladders } from './views/Ladders';
@@ -13,8 +14,6 @@ import { Today } from './views/Today';
 /**
  * `label` is what fits across the bottom of a phone; `wide` is what the iPad
  * rail shows instead, where there is room for the word the tab actually means.
- * Exactly one of the two is ever rendered — the other is display:none, so it
- * stays out of the accessibility tree rather than being read out twice.
  */
 const TABS = [
   { id: 'today', label: 'Today', wide: 'Today' },
@@ -59,9 +58,43 @@ const GLYPHS: Record<Tab, ReactNode> = {
   ),
 };
 
+/** Matches the tier-1 media query in styles.ipad.css — the width at which the
+ *  tab bar becomes the sidebar, and so the width at which the wider labels fit. */
+const RAIL_QUERY = '(min-width: 740px) and (min-height: 600px)';
+
+/**
+ * Which label to render, decided in JS rather than by hiding one in CSS.
+ *
+ * A display:none sibling still counts toward the button's textContent, and that
+ * is what an assertion on the current tab reads — so the hidden copy is not
+ * merely redundant, it is wrong. Rendering one label keeps the DOM honest.
+ */
+function useWideLabels(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(RAIL_QUERY);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(RAIL_QUERY).matches,
+    () => false,
+  );
+}
+
 export function App() {
   const store = useAppData();
-  const [tab, setTab] = useState<Tab>('today');
+  const wideLabels = useWideLabels();
+  /**
+   * Coming back from a Health sync opens on Target rather than Today.
+   *
+   * iOS returns from Shortcuts as a fresh page load, so a tap that started on
+   * the Target tab would otherwise land you on Today with a toast about days
+   * you can no longer see. The Health view does the importing; this only puts
+   * you in front of it.
+   */
+  const [tab, setTab] = useState<Tab>(() =>
+    readHandoff(window.location.href) || isSyncPending() ? 'health' : 'today',
+  );
 
   if (!store.data) return <div className="wrap boot">Loading…</div>;
   const d = store.data;
@@ -119,8 +152,7 @@ export function App() {
               >
                 {GLYPHS[t.id]}
               </svg>
-              <span className="tabShort">{t.label}</span>
-              <span className="tabWide">{t.wide}</span>
+              {wideLabels ? t.wide : t.label}
             </button>
           ))}
         </nav>

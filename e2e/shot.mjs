@@ -77,14 +77,21 @@ function health() {
   return days;
 }
 
+/**
+ * Tabs addressed by position, not by label: the rail renames them at iPad
+ * width (Food becomes Nutrition, Ladders becomes Progressions), so matching on
+ * text only works at one of the sizes this script is for. Order is the order
+ * in App.tsx.
+ */
 const TABS = [
-  ['Today', 'today'],
-  ['Target', 'target'],
-  ['Ladders', 'ladders'],
-  ['Food', 'food'],
-  ['Stats', 'stats'],
-  ['Setup', 'setup'],
+  [0, 'today'],
+  [1, 'ladders'],
+  [2, 'food'],
+  [3, 'target'],
+  [4, 'stats'],
+  [5, 'setup'],
 ];
+const TARGET_TAB = 3;
 
 const browser = await launchChromium();
 
@@ -103,19 +110,19 @@ for (const size of SIZES) {
   await page.waitForSelector('header h1', { timeout: 20000 });
 
   // Seed Health data through the app's own import path, not by writing the DB.
-  await page.locator('nav button', { hasText: 'Target' }).click();
+  await page.locator('nav button').nth(TARGET_TAB).click();
   const payload = JSON.stringify({
     t: 'health8w',
     v: 1,
     days: Object.entries(health()).map(([d, day]) => ({ d, ...day })),
   });
-  await page.locator('.fold summary').click();
+  await page.locator('.fold summary', { hasText: 'Paste instead' }).click();
   await page.locator('textarea.paste').fill(payload);
   await page.locator('button', { hasText: 'Import pasted' }).click();
   await page.waitForFunction(() => document.body.innerText.includes('kg/mo'), { timeout: 20000 });
 
-  for (const [label, name] of TABS) {
-    await page.locator('nav button', { hasText: label }).click();
+  for (const [index, name] of TABS) {
+    await page.locator('nav button').nth(index).click();
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(dir, `${name}.png`), fullPage: true });
     console.log(`shot: ${size.name}/${name}.png`);

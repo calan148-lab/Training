@@ -82,6 +82,16 @@ function check(name, cond, detail = '') {
   else { failures.push(`${name}${detail ? ` — ${detail}` : ''}`); console.log(`  FAIL ${name} ${detail}`); }
 }
 
+/**
+ * Fixture dates, relative to the day the suite runs.
+ *
+ * Every target judges on a window ending today, so a fixture pinned to fixed
+ * calendar dates slides out of those windows as real time passes and the suite
+ * starts failing for no reason but the date. Anchoring to `now` keeps what each
+ * assertion is actually testing true on any day it runs.
+ */
+const dayISO = (offset) => new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10);
+
 /** The v1 payload a real phone would be carrying. */
 const V1 = {
   start: '2026-08-04',
@@ -95,25 +105,12 @@ const V1 = {
   seen: ['first'],
 };
 
-/**
- * The fixture window, anchored to today rather than to a fixed date.
- *
- * Sleep, recovery and training frequency are judged on a window trailing *now*,
- * so a fixture pinned to a calendar date stops having any data in that window
- * the moment the clock moves past it — and the assertions about them start
- * failing on a run that changed nothing. This is what took the suite red in
- * September against an August fixture.
- */
-const DAY0 = (() => {
-  const t = new Date();
-  return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - 27 * 864e5;
-})();
-/** day(0) is 27 days ago; day(27) is today. */
-const day = (n) => new Date(DAY0 + n * 864e5).toISOString().slice(0, 10);
-
 /** A synthetic export.xml with values we can verify by hand. */
 function buildExportXml() {
   const rows = [];
+  // Day 27 is today, so the last night of sleep lands inside the 7-day window
+  // the sleep target judges on — the whole point of the trailing fixture.
+  const day = (n) => dayISO(n - 27);
   for (let i = 0; i < 28; i++) {
     const d = day(i);
     // Weight climbing 0.4 kg over 28 days ~ +0.43 kg/month: inside the band.
@@ -226,7 +223,10 @@ try {
   const days = afterImport.health.days;
   check('28 days imported', Object.keys(days).length === 28, `got ${Object.keys(days).length}`);
 
-  const sample = days[day(6)];
+  // Mid-range day of the export, addressed relatively like the fixture that
+  // generated it. A fixed date here silently falls outside the window as the
+  // days pass, and every field assertion below then reads undefined.
+  const sample = days[dayISO(-14)];
   check('steps summed across the day', sample?.steps === 8412, `got ${sample?.steps}`);
   check('active energy captured', sample?.aen === 540, `got ${sample?.aen}`);
   check('resting HR averaged', sample?.rhr === 51, `got ${sample?.rhr}`);
@@ -272,10 +272,8 @@ try {
   const rolling = JSON.stringify({
     t: 'health8w', v: 1,
     days: [
-      // One day the export already carried and one it did not, which is what
-      // "1 new day, 1 refreshed" is testing.
-      { d: day(27), wt: 71.8, steps: 8500 },
-      { d: day(28), wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
+      { d: dayISO(-28), wt: 71.8, steps: 8500 },
+      { d: dayISO(-1), wt: 71.9, bf: 14.1, rhr: 52, hrv: 65, sleep: 8.1, steps: 9000, aen: 600, wo: 1 },
     ],
   });
   await page.locator('input[accept*="json"]').setInputFiles({
@@ -293,20 +291,47 @@ try {
 
   console.log('\n4c. Several files at once, for when you have been away');
   await page.locator('input[accept*="json"]').setInputFiles([
-    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from(`[{"d":"${day(-30)}","steps":7000}]`) },
-    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(`{"d":"${day(-29)}","steps":7100}`) },
+    { name: 'a.json', mimeType: 'application/json', buffer: Buffer.from(`[{"d":"${dayISO(-60)}","steps":7000}]`) },
+    { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(`{"d":"${dayISO(-59)}","steps":7100}`) },
   ]);
   check('multi-file, bare array and single object both accepted',
     await waitForToast(page, '2 new days').catch(() => false));
-  const both = await waitForState(page, (x) => !!x.health.days[day(-30)] && !!x.health.days[day(-29)], 'multi-file merge');
-  check('both files landed with their values', both.health.days[day(-30)].steps === 7000 && both.health.days[day(-29)].steps === 7100);
+  const both = await waitForState(page, (x) => !!x.health.days[dayISO(-60)] && !!x.health.days[dayISO(-59)], 'multi-file merge');
+  check('both files landed with their values', both.health.days[dayISO(-60)].steps === 7000 && both.health.days[dayISO(-59)].steps === 7100);
 
-  const merged = (await waitForState(page, (d) => !!d.health.days[day(28)], 'shortcut merge'))
-    .health.days[day(28)];
+  const merged = (await waitForState(page, (d) => !!d.health.days[dayISO(-1)], 'shortcut merge'))
+    .health.days[dayISO(-1)];
   check('shortcut day merged', merged?.wt === 71.9 && merged?.bf === 14.1, JSON.stringify(merged));
 
+  console.log('\n4d. One-tap sync: the Shortcut hands its week straight back on the URL');
+  // This is what iOS does when the Shortcut finishes: it reopens the app on a
+  // URL carrying the payload. No file picker is involved on this path.
+  const handoff = JSON.stringify({ t: 'health8w', v: 1, days: [{ d: dayISO(-30), wt: 72.0, steps: 9100 }] });
+  await page.goto(`${BASE}/#health=${encodeURIComponent(handoff)}`, { waitUntil: 'networkidle' });
+  // Changing only the hash is a same-document navigation and would not re-run
+  // the app; iOS comes back from Shortcuts on a full load, so force one.
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('header h1', { timeout: 15000 });
+  const landedOn = await page.locator('nav button[aria-current="true"]').textContent();
+  check('a sync return opens on the Target tab', landedOn === 'Target', landedOn);
+  check('the handed-back payload imported itself', await waitForToast(page, 'new day').catch(() => false));
+  const synced = await waitForState(page, (x) => !!x.health.days[dayISO(-30)], 'handoff merge');
+  check('handed-back day merged with its values', synced.health.days[dayISO(-30)].steps === 9100,
+    JSON.stringify(synced.health.days[dayISO(-30)]));
+  check('payload scrubbed from the address bar', !page.url().includes('health='), page.url());
+
+  console.log('\n4d-ii. Reopening the app later does not replay that sync');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('header h1', { timeout: 15000 });
+  await page.waitForTimeout(600);
+  check('no import toast on a plain visit', (await page.locator('.toast').count()) === 0);
+  const reopenedOn = await page.locator('nav button[aria-current="true"]').textContent();
+  check('and it opens on Today as usual', reopenedOn === 'Today', reopenedOn);
+
   console.log('\n5. Paste still works, and a stale Shortcut is rejected loudly');
-  await page.locator('.fold summary').click();
+  await page.locator('nav button', { hasText: 'Target' }).click();
+  await page.waitForSelector('button.act');
+  await page.locator('.fold summary', { hasText: 'Paste instead' }).click();
   await page.locator('textarea.paste').fill(JSON.stringify({ t: 'health8w', v: 99, days: [] }));
   await page.locator('button', { hasText: 'Import pasted' }).click();
   check('version mismatch surfaced', await waitForToast(page, 'Update the Shortcut').catch(() => false));
@@ -412,15 +437,30 @@ try {
   check('repeat option offered', (await page.locator('h2', { hasText: 'Same as last time' }).count()) === 1);
   await page.screenshot({ path: join(SHOTS, '5-logged.png'), fullPage: true });
 
+  console.log('\n9b. The sync button says why it can do nothing in a desktop browser');
+  await page.locator('nav button', { hasText: 'Target' }).click();
+  await page.waitForSelector('button.act');
+  check('sync button offered first', (await page.locator('button', { hasText: 'Sync now' }).count()) === 1);
+  await page.locator('button', { hasText: 'Sync now' }).click();
+  // Chromium has no handler for shortcuts:// and an unclaimed scheme fails
+  // silently, so the button has to account for itself rather than look broken.
+  // This runs last: refusing the scheme leaves the document half-navigated and
+  // Chromium swallows subsequent clicks, which is an artifact of testing an
+  // iOS handoff in a desktop browser rather than anything the app can fix.
+  check('unhandled scheme is explained, not swallowed',
+    await waitForToast(page, "Couldn't open Shortcuts", 8000).catch(() => false));
+
   console.log('\n10. No page errors anywhere in that run');
   // fonts.googleapis.com is unreachable in this sandbox, which produces both a
   // failed request and a bare console line carrying no URL. The app declares a
   // full fallback font stack, so this is an environment artifact, not a defect —
   // but assert it is the *only* thing that failed rather than filtering blindly.
-  const nonFontFailures = failedRequests.filter((u) => !/fonts\.(googleapis|gstatic)\.com/.test(u));
+  // 4e navigates to shortcuts://, which desktop Chromium cannot handle. That
+  // refusal is the behaviour under test, not a defect.
+  const nonFontFailures = failedRequests.filter((u) => !/fonts\.(googleapis|gstatic)\.com|^shortcuts:/.test(u));
   check('only external fonts failed to load', nonFontFailures.length === 0, nonFontFailures.join(' | '));
   const real = errors.filter(
-    (e) => !/favicon|manifest|ServiceWorker|ERR_CONNECTION_RESET|fonts\./i.test(e),
+    (e) => !/favicon|manifest|ServiceWorker|ERR_CONNECTION_RESET|fonts\.|shortcuts:/i.test(e),
   );
   check('no JavaScript errors', real.length === 0, real.slice(0, 3).join(' | '));
   console.log('\n   served:', JSON.stringify(served));

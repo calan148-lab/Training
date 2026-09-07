@@ -260,8 +260,8 @@ nav button[aria-current="true"]{color:var(--brass);border-top-color:var(--brass)
 /* six tabs need to fit a phone, so the labels shrink rather than wrap */
 nav{display:flex}
 nav button{flex:1;min-width:0;font-size:10px;letter-spacing:.04em;padding:0 2px}
-/* The icon and the long label are the iPad rail's; a phone shows neither. */
-.tabIcon,.tabWide{display:none}
+/* The icon is the iPad rail's; a phone shows the label alone. */
+.tabIcon{display:none}
 
 .strip{display:block;padding:12px 14px;border-radius:11px;margin:0 0 16px;border:1px solid var(--steel);background:var(--slate)}
 .strip b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase}
